@@ -67,7 +67,10 @@ namespace jest
 	namespace types
 	{
 		shared_ptr<void const> typed_cell(new int);
-		shared_ptr<void const> get_type_object(jest::typed_cell*) {return typed_cell;}
+		shared_ptr<void const> get_type_object(jest::typed_cell*)
+		{
+			return typed_cell;
+		}
 	}
 
 	struct pattern
@@ -101,7 +104,8 @@ namespace jest
 
 	namespace values
 	{
-		shared_ptr<string const> enclosing_scope(new string("enclosing_scope"));
+		shared_ptr<string const> enclosing_scope(
+				new string("enclosing_scope"));
 	}
 
 	namespace patterns
@@ -167,7 +171,8 @@ namespace jest
 			}
 			else
 			{
-				fatal(c, "equal() cannot compare values of unrecognized types.");
+				fatal(c, "equal() cannot compare values "
+						"of unrecognized types.");
 				return false;
 			}
 		}
@@ -189,16 +194,17 @@ namespace jest
 
 		shared_ptr<match_result const> match(
 				context* c,
-				shared_ptr<void const> pattern_type, shared_ptr<void const> pattern_value,
+				shared_ptr<void const> pattern_type,
+				shared_ptr<void const> pattern_value,
 				shared_ptr<void const> type, shared_ptr<void const> value)
 		{
 			if (pattern_type == pattern_types::constant)
 			{
 				shared_ptr<jest::typed_value const> pattern_typed_value =
-					static_pointer_cast<jest::typed_value const>(pattern_value);
-				if (!equal(c,
-							pattern_typed_value->type, pattern_typed_value->value,
-							type, value))
+					static_pointer_cast<jest::typed_value const>(
+							pattern_value);
+				if (!equal(c, pattern_typed_value->type,
+							pattern_typed_value->value, type, value))
 					return shared_ptr<match_result const>();
 				shared_ptr<match_result> result(new match_result);
 				return result;
@@ -218,7 +224,8 @@ namespace jest
 				if (type != types::typed_cell)
 					return shared_ptr<match_result const>();
 				shared_ptr<jest::pattern_cell const> pattern_cell =
-					static_pointer_cast<jest::pattern_cell const>(pattern_value);
+					static_pointer_cast<jest::pattern_cell const>(
+							pattern_value);
 				shared_ptr<typed_cell const> cell =
 					static_pointer_cast<typed_cell const>(value);
 				shared_ptr<match_result const> head_result = match(c,
@@ -238,12 +245,15 @@ namespace jest
 				for (int j = 0, jcnt = int(tail_result->bindings.size());
 					j < jcnt; ++j)
 				{
-					shared_ptr<binding const> tail_binding = tail_result->bindings[j];
+					shared_ptr<binding const> tail_binding =
+						tail_result->bindings[j];
 
 					shared_ptr<binding const> matching_binding;
-					for (int i = 0, icnt = int(head_result->bindings.size()); i < icnt; ++i)
+					for (int i = 0, icnt = int(head_result->bindings.size());
+							i < icnt; ++i)
 					{
-						shared_ptr<binding const> head_binding = head_result->bindings[i];
+						shared_ptr<binding const> head_binding =
+							head_result->bindings[i];
 
 						if (head_binding->symbol == tail_binding->symbol)
 							matching_binding = head_binding;
@@ -324,7 +334,8 @@ namespace jest
 		struct form
 		{
 			form(shared_ptr<expression const> const& head,
-					std::vector<shared_ptr<parsing::statement const> > const& statements)
+					vector<shared_ptr<parsing::statement const> > const&
+					statements)
 				: head(head), statements(statements) {}
 			shared_ptr<expression const> head;
 			std::vector<shared_ptr<parsing::statement const> > statements;
@@ -341,7 +352,8 @@ namespace jest
 
 		struct module
 		{
-			module(std::vector<shared_ptr<parsing::define const> > const& defines)
+			module(std::vector<shared_ptr<parsing::define const> > const&
+					defines)
 				: defines(defines) {}
 			std::vector<shared_ptr<parsing::define const> > defines;
 		};
@@ -372,32 +384,41 @@ namespace jest
 		shared_ptr<statement const> parse_form_statement_contents(context* c);
 		struct form_statement_tail
 		{
-			form_statement_tail(vector<shared_ptr<parameter const> > const& parameters,
-			vector<shared_ptr<statement const> > const& statements,
-			shared_ptr<parsing::expression const> const& expression)
-				: parameters(parameters), statements(statements), expression(expression) {}
+			form_statement_tail(
+					vector<shared_ptr<parameter const> > const& parameters,
+					vector<shared_ptr<statement const> > const& statements,
+					shared_ptr<parsing::expression const> const& expression):
+				parameters(parameters),
+				statements(statements),
+				expression(expression)
+			{}
 			vector<shared_ptr<parameter const> > parameters;
 			vector<shared_ptr<statement const> > statements;
 			shared_ptr<parsing::expression const> expression;
 		};
-		shared_ptr<form_statement_tail const> parse_form_statement_tail(context* c);
+		shared_ptr<form_statement_tail const> parse_form_statement_tail(
+				context* c);
 		struct prototype_non_thunk_tail
 		{
-			prototype_non_thunk_tail(shared_ptr<parsing::expression const> const&
-					initial_type, vector<shared_ptr<parameter const> > const&
-					subsequent_parameters, shared_ptr<parsing::expression const> const&
-					expression)
-				: initial_type(initial_type), subsequent_parameters(subsequent_parameters),
-				expression(expression) {}
+			prototype_non_thunk_tail(shared_ptr<parsing::expression const>
+					const& initial_type,
+					vector<shared_ptr<parameter const> > const&
+					subsequent_parameters,
+					shared_ptr<parsing::expression const> const& expression):
+				initial_type(initial_type),
+				subsequent_parameters(subsequent_parameters),
+				expression(expression)
+			{}
 			shared_ptr<parsing::expression const> initial_type;
 			vector<shared_ptr<parameter const> > subsequent_parameters;
 			shared_ptr<parsing::expression const> expression;
 		};
 		struct form_expression_non_thunk_tail
 		{
-			form_expression_non_thunk_tail(vector<shared_ptr<statement const> > const&
-					subsequent_arguments)
-				: subsequent_arguments(subsequent_arguments) {}
+			form_expression_non_thunk_tail(
+					vector<shared_ptr<statement const> > const&
+					subsequent_arguments):
+				subsequent_arguments(subsequent_arguments) {}
 			vector<shared_ptr<statement const> > subsequent_arguments;
 		};
 		typedef variant<
@@ -407,11 +428,13 @@ namespace jest
 		shared_ptr<expression const> parse_define_tail(context* c);
 		struct form_expression_tail
 		{
-			form_expression_tail(vector<shared_ptr<statement const> > const& statements)
+			form_expression_tail(
+					vector<shared_ptr<statement const> > const& statements)
 				: statements(statements) {}
 			vector<shared_ptr<statement const> > statements;
 		};
-		shared_ptr<form_expression_tail const> parse_form_expression_tail(context* c);
+		shared_ptr<form_expression_tail const> parse_form_expression_tail(
+				context* c);
 		shared_ptr<define const> parse_form_define(context* c);
 		shared_ptr<parameter const> parse_parameter(context* c);
 		shared_ptr<expression const> parse_expression(context* c);
@@ -554,24 +577,29 @@ namespace jest
 		//	identifier ["=" expression]
 		shared_ptr<statement const> parse_symbol_statement(context* c)
 		{
-			shared_ptr<parsing::identifier const> identifier = parse_identifier(c);
+			shared_ptr<parsing::identifier const> identifier =
+				parse_identifier(c);
 			if (!identifier)
 				return shared_ptr<parsing::statement const>();
 			if (accept(c, equal))
 			{
-				shared_ptr<parsing::expression const> expression = parse_expression(c);
-				shared_ptr<parsing::target> target(new parsing::target(identifier));
-				shared_ptr<parsing::define> define(new parsing::define(
+				shared_ptr<parsing::expression const> expression =
+					parse_expression(c);
+				shared_ptr<parsing::target> target(
+						new parsing::target(identifier));
+				shared_ptr<parsing::define> define(
+						new parsing::define(
 						target, expression));
-				shared_ptr<parsing::statement> statement(new parsing::statement(define));
+				shared_ptr<parsing::statement> statement(
+						new parsing::statement(define));
 				return statement;
 			}
 			else
 			{
-				shared_ptr<parsing::expression> expression(new parsing::expression(
-						identifier));
-				shared_ptr<parsing::statement> statement(new parsing::statement(
-							expression));
+				shared_ptr<parsing::expression> expression(
+						new parsing::expression(identifier));
+				shared_ptr<parsing::statement> statement(
+						new parsing::statement(expression));
 				return statement;
 			}
 		}
@@ -585,9 +613,10 @@ namespace jest
 				return shared_ptr<define const>();
 			expect(c, equal);
 			shared_ptr<expression const> expression = parse_expression(c);
-			shared_ptr<parsing::target> target(new parsing::target(identifier));
-			shared_ptr<parsing::define> define(new parsing::define(
-					target, expression));
+			shared_ptr<parsing::target> target(
+					new parsing::target(identifier));
+			shared_ptr<parsing::define> define(
+					new parsing::define(target, expression));
 			return define;
 		}
 
@@ -616,27 +645,28 @@ namespace jest
 				{
 					parse_assert(c, tail->statements.empty());
 
-					shared_ptr<parsing::expression> name(new parsing::expression(
-								identifier));
-					shared_ptr<parsing::prototype> prototype(new parsing::prototype(
-							name, tail->parameters));
-					shared_ptr<parsing::target> target(new parsing::target(prototype));
-					shared_ptr<parsing::define> define(new parsing::define(target,
-								tail->expression));
-					shared_ptr<parsing::statement> statement(new parsing::statement(
-								define));
+					shared_ptr<parsing::expression> name(
+							new parsing::expression(identifier));
+					shared_ptr<parsing::prototype> prototype(
+							new parsing::prototype(name, tail->parameters));
+					shared_ptr<parsing::target> target(
+							new parsing::target(prototype));
+					shared_ptr<parsing::define> define(
+							new parsing::define(target, tail->expression));
+					shared_ptr<parsing::statement> statement(
+							new parsing::statement(define));
 					return statement;
 				}
 				else if (!tail->statements.empty())
 				{
-					shared_ptr<parsing::expression> head(new parsing::expression(
-								identifier));
-					shared_ptr<parsing::form> form(new parsing::form(head,
-								tail->statements));
-					shared_ptr<parsing::expression> expression(new parsing::expression(
-								form));
-					shared_ptr<parsing::statement> statement(new parsing::statement(
-								expression));
+					shared_ptr<parsing::expression> head(
+							new parsing::expression(identifier));
+					shared_ptr<parsing::form> form(
+							new parsing::form(head, tail->statements));
+					shared_ptr<parsing::expression> expression(
+							new parsing::expression(form));
+					shared_ptr<parsing::statement> statement(
+							new parsing::statement(expression));
 					return statement;
 				}
 				else
@@ -652,18 +682,20 @@ namespace jest
 				vector<shared_ptr<statement const> > statements;
 				while (c->symbol != gt)
 				{
-					shared_ptr<statement const> statement = parse_statement(c);
+					shared_ptr<statement const> statement =
+						parse_statement(c);
 					parse_assert(c, statement);
 					statements.push_back(statement);
 				}
 
 				expect(c, gt);
 
-				shared_ptr<parsing::form> form(new parsing::form(head, statements));
-				shared_ptr<parsing::expression> expression(new parsing::expression(
-							form));
-				shared_ptr<parsing::statement> statement(new parsing::statement(
-							expression));
+				shared_ptr<parsing::form> form(
+						new parsing::form(head, statements));
+				shared_ptr<parsing::expression> expression(
+						new parsing::expression(form));
+				shared_ptr<parsing::statement> statement(
+						new parsing::statement(expression));
 
 				return statement;
 			}
@@ -673,7 +705,8 @@ namespace jest
 		//	">" [define_tail]
 		//	| identifier non_thunk_tail
 		//	| {statement} ">"
-		shared_ptr<form_statement_tail const> parse_form_statement_tail(context* c)
+		shared_ptr<form_statement_tail const> parse_form_statement_tail(
+				context* c)
 		{
 			vector<shared_ptr<parameter const> > parameters;
 			vector<shared_ptr<statement const> > statements;
@@ -688,30 +721,40 @@ namespace jest
 				shared_ptr<identifier const> identifier = parse_identifier(c);
 				if (identifier)
 				{
-					shared_ptr<non_thunk_tail const> tail = parse_non_thunk_tail(c);
-					if (shared_ptr<prototype_non_thunk_tail const> const* ptail =
-							boost::get<shared_ptr<prototype_non_thunk_tail const> >(tail.get()))
+					shared_ptr<non_thunk_tail const> tail =
+						parse_non_thunk_tail(c);
+					shared_ptr<prototype_non_thunk_tail const> const* ptail =
+						boost::get<
+						shared_ptr<prototype_non_thunk_tail const> >(
+								tail.get());
+					if (ptail)
 					{
 						shared_ptr<parameter> initial_parameter(new parameter(
 								identifier, (*ptail)->initial_type));
 						parameters.push_back(initial_parameter);
-						for (int i = 0, cnt = int((*ptail)->subsequent_parameters.size());
+						for (int i = 0, cnt =
+								int((*ptail)->subsequent_parameters.size());
 								i < cnt; ++i)
-							parameters.push_back((*ptail)->subsequent_parameters[i]);
+							parameters.push_back(
+									(*ptail)->subsequent_parameters[i]);
 						expression = (*ptail)->expression;
 					}
-					else if (shared_ptr<form_expression_non_thunk_tail const> const* ftail =
-							boost::get<shared_ptr<form_expression_non_thunk_tail const> >(
+					else if (shared_ptr<form_expression_non_thunk_tail const>
+							const* ftail = boost::get<shared_ptr<
+							form_expression_non_thunk_tail const> >(
 								tail.get()))
 					{
-						shared_ptr<parsing::expression> expression(new parsing::expression(
-									identifier));
-						shared_ptr<parsing::statement> statement(new parsing::statement(
-									expression));
+						shared_ptr<parsing::expression> expression(
+								new parsing::expression(identifier));
+						shared_ptr<parsing::statement> statement(
+								new parsing::statement(expression));
 						statements.push_back(statement);
-						for (int i = 0, cnt = int((*ftail)->subsequent_arguments.size());
+						for (int i = 0,
+								cnt = int(
+									(*ftail)->subsequent_arguments.size());
 								i < cnt; ++i)
-							statements.push_back((*ftail)->subsequent_arguments[i]);
+							statements.push_back(
+									(*ftail)->subsequent_arguments[i]);
 					}
 					else
 					{
@@ -722,7 +765,8 @@ namespace jest
 				{
 					while (c->symbol != gt)
 					{
-						shared_ptr<statement const> statement = parse_statement(c);
+						shared_ptr<statement const> statement =
+							parse_statement(c);
 						parse_assert(c, statement);
 						statements.push_back(statement);
 					}
@@ -742,17 +786,21 @@ namespace jest
 		{
 			if (accept(c, colon))
 			{
-				shared_ptr<expression const> initial_type = parse_expression(c);
+				shared_ptr<expression const> initial_type =
+					parse_expression(c);
 				vector<shared_ptr<parameter const> > subsequent_parameters;
 				while (c->symbol != gt)
 				{
-					shared_ptr<parameter const> parameter = parse_parameter(c);
+					shared_ptr<parameter const> parameter =
+						parse_parameter(c);
 					parse_assert(c, parameter);
 					subsequent_parameters.push_back(parameter);
 				}
 				expect(c, gt);
-				shared_ptr<expression const> expression = parse_define_tail(c);
-				shared_ptr<prototype_non_thunk_tail> ptail(new prototype_non_thunk_tail(
+				shared_ptr<expression const> expression =
+					parse_define_tail(c);
+				shared_ptr<prototype_non_thunk_tail> ptail(
+						new prototype_non_thunk_tail(
 						initial_type, subsequent_parameters, expression));
 				shared_ptr<non_thunk_tail> tail(new non_thunk_tail(ptail));
 				return tail;
@@ -762,7 +810,8 @@ namespace jest
 				vector<shared_ptr<statement const> > subsequent_arguments;
 				while (c->symbol != gt)
 				{
-					shared_ptr<statement const> statement = parse_statement(c);
+					shared_ptr<statement const> statement =
+						parse_statement(c);
 					parse_assert(c, statement);
 					subsequent_arguments.push_back(statement);
 				}
@@ -787,17 +836,20 @@ namespace jest
 
 		//form_expression_tail =
 		//	{statement} ">"
-		shared_ptr<form_expression_tail const> parse_form_expression_tail(context* c)
+		shared_ptr<form_expression_tail const> parse_form_expression_tail(
+				context* c)
 		{
 			vector<shared_ptr<statement const> > statements;
 			while (c->symbol != gt)
 			{
-				shared_ptr<parsing::statement const> statement = parse_statement(c);
+				shared_ptr<parsing::statement const> statement =
+					parse_statement(c);
 				parse_assert(c, statement);
 				statements.push_back(statement);
 			}
 			expect(c, gt);
-			shared_ptr<form_expression_tail> tail(new form_expression_tail(statements));
+			shared_ptr<form_expression_tail> tail(
+					new form_expression_tail(statements));
 			return tail;
 		}
 
@@ -817,16 +869,18 @@ namespace jest
 				parse_assert(c, parameter);
 				parameters.push_back(parameter);
 			}
-			shared_ptr<parsing::prototype> prototype(new parsing::prototype(name,
-						parameters));
+			shared_ptr<parsing::prototype> prototype(
+					new parsing::prototype(name, parameters));
 
 			expect(c, gt);
 			expect(c, equal);
 
-			shared_ptr<parsing::expression const> expression = parse_expression(c);
-			shared_ptr<parsing::target> target(new parsing::target(prototype));
-			shared_ptr<parsing::define> define(new parsing::define(target,
-					expression));
+			shared_ptr<parsing::expression const> expression =
+				parse_expression(c);
+			shared_ptr<parsing::target> target(
+					new parsing::target(prototype));
+			shared_ptr<parsing::define> define(
+					new parsing::define(target, expression));
 			return define;
 		}
 
@@ -841,7 +895,8 @@ namespace jest
 
 			shared_ptr<expression const> type = parse_expression(c);
 			parse_assert(c, type);
-			shared_ptr<parsing::parameter> parameter(new parsing::parameter(name, type));
+			shared_ptr<parsing::parameter> parameter(
+					new parsing::parameter(name, type));
 			return parameter;
 		}
 
@@ -850,11 +905,12 @@ namespace jest
 		//	| form_expression
 		shared_ptr<expression const> parse_expression(context* c)
 		{
-			shared_ptr<parsing::identifier const> identifier = parse_identifier(c);
+			shared_ptr<parsing::identifier const> identifier =
+				parse_identifier(c);
 			if (identifier)
 			{
-				shared_ptr<parsing::expression> expression(new parsing::expression(
-						identifier));
+				shared_ptr<parsing::expression> expression(
+						new parsing::expression(identifier));
 				return expression;
 			}
 			return parse_form_expression(c);
@@ -868,11 +924,13 @@ namespace jest
 				return shared_ptr<expression const>();
 			shared_ptr<expression const> head = parse_expression(c);
 			parse_assert(c, head);
-			shared_ptr<form_expression_tail const> tail = parse_form_expression_tail(c);
+			shared_ptr<form_expression_tail const> tail =
+				parse_form_expression_tail(c);
 			parse_assert(c, tail);
-			shared_ptr<parsing::form> form(new parsing::form(head, tail->statements));
-			shared_ptr<parsing::expression> expression(new parsing::expression(
-						form));
+			shared_ptr<parsing::form> form(new parsing::form(
+						head, tail->statements));
+			shared_ptr<parsing::expression> expression(
+					new parsing::expression(form));
 			return expression;
 		}
 
@@ -941,10 +999,11 @@ namespace jest
 								type, value);
 
 					if (!match_result)
-						return next_evaluator->evaluate(shared_ptr<evaluator const>(),
-								type, value);
+						return next_evaluator->evaluate(
+								shared_ptr<evaluator const>(), type, value);
 
-					for (int i = 0, cnt = int(match_result->bindings); i < cnt; ++i)
+					for (int i = 0, cnt = int(match_result->bindings);
+							i < cnt; ++i)
 					{
 						shared_ptr<patterns::binding const> binding =
 							match_result->bindings[i];
@@ -955,16 +1014,18 @@ namespace jest
 						shared_ptr<jest::pattern> pattern(new jest::pattern(
 									pattern_types::constant, symbol_value));
 
-						shared_ptr<typed_value> argument_value(new typed_value(
-									type, value));
+						shared_ptr<typed_value> argument_value(
+								new typed_value(type, value));
 						shared_ptr<typed_value> quote_value(
-								new typed_value(types::symbol, special_symbols::quote));
-						shared_ptr<typed_cell> value_cell(new typed_cell(
-									argument_value, shared_ptr<typed_value>()));
+								new typed_value(types::symbol,
+									special_symbols::quote));
+						shared_ptr<typed_cell> value_cell(
+								new typed_cell(argument_value,
+									shared_ptr<typed_value>()));
 						shared_ptr<typed_cell> quote_cell(new typed_cell(
 									quote_value, value_cell));
-						shared_ptr<lambda_evaluator> argument_evaluator(new lambda_evaluator(
-									pattern, quote_cell));
+						shared_ptr<lambda_evaluator> argument_evaluator(
+								new lambda_evaluator(pattern, quote_cell));
 
 						put it in the scope somehow
 					}
@@ -975,33 +1036,43 @@ namespace jest
 		{
 			struct caller
 			{
-				virtual pair<shared_ptr<evaluator const>, shared_ptr<void const> >
-					call(shared_ptr<patterns::match_result const> bindings) const = 0;
+				virtual pair<shared_ptr<evaluator const>,
+						shared_ptr<void const> >
+					call(shared_ptr<
+							patterns::match_result const> bindings) const = 0;
 			};
 
 			template <typename T> shared_ptr<T const> argument_from_bindings(
-					shared_ptr<patterns::match_result const> bindings, string const& label)
+					shared_ptr<patterns::match_result const> bindings,
+					string const& label)
 			{
 				int binding_index = -1;
-				for (int i = 0, cnt = int(bindings->bindings.size()); i < cnt; ++i)
+				for (int i = 0, cnt = int(bindings->bindings.size());
+						i < cnt; ++i)
 				{
 					if (bindings->bindings[i]->symbol == label)
 						binding_index = i;
 				}
 				if (binding_index == -1)
-					fatal("Internal: missing binding when invoking native function.");
-				shared_ptr<void const> type = bindings->bindings[binding_index]->type;
-				shared_ptr<void const> value = bindings->bindings[binding_index]->value;
+					fatal("Internal: missing binding when "
+							"invoking native function.");
+				shared_ptr<void const> type =
+					bindings->bindings[binding_index]->type;
+				shared_ptr<void const> value =
+					bindings->bindings[binding_index]->value;
 				if (type != get_type_object(static_cast<T*>(0)))
-					fatal("Internal: incorrect type when invoking native function.");
+					fatal("Internal: incorrect type when "
+							"invoking native function.");
 			}
 
 			template <typename S> struct functor_caller {};
 
 			template <typename T, typename X0> struct functor_caller<T(X0)>
 			{
-				virtual pair<shared_ptr<evaluator const>, shared_ptr<void const> >
-					call(shared_ptr<patterns::match_result const> bindings) const
+				virtual pair<shared_ptr<evaluator const>,
+						shared_ptr<void const> >
+					call(shared_ptr<
+							patterns::match_result const> bindings) const
 					{
 						shared_ptr<T> result = this->f(
 								argument_from_bindings<X0>(bindings, "prm0"));
@@ -1013,9 +1084,12 @@ namespace jest
 			template <typename F> struct pattern_creator
 			{
 				typedef F function_type;
-				typedef typename parameter_types<function_type>::type parameter_types;
-				typedef typename begin<parameter_types>::type parameters_begin;
-				typedef typename end<parameter_types>::type parameters_end;
+				typedef typename
+					parameter_types<function_type>::type parameter_types;
+				typedef typename
+					begin<parameter_types>::type parameters_begin;
+				typedef typename
+					end<parameter_types>::type parameters_end;
 
 				shared_ptr<pattern const> operator()()
 				{
@@ -1032,24 +1106,30 @@ namespace jest
 				}
 
 				template <typename I> shared_ptr<pattern const> recurse(I*,
-						vector<shared_ptr<string const> >::iterator symbol_position) const
+						vector<shared_ptr<string const> >::iterator
+						symbol_position) const
 				{
 					typedef typename deref<I>::type parameter_type;
 					typedef typename next<I>::type next_iterator;
 
 					shared_ptr<string const> symbol = *symbol_position;
 
-					shared_ptr<void const> pattern_type = types::get_type_object(
-							static_cast<parameter_type*>(0));
-					shared_ptr<jest::pattern> type_pattern(new jest::pattern(
+					shared_ptr<void const> pattern_type =
+						types::get_type_object(
+								static_cast<parameter_type*>(0));
+					shared_ptr<jest::pattern> type_pattern(
+							new jest::pattern(
 								pattern_types::constant, pattern_type));
-					shared_ptr<jest::pattern> variable_pattern(new jest::pattern(
+					shared_ptr<jest::pattern> variable_pattern(
+							new jest::pattern(
 								pattern_types::variable, symbol));
-					shared_ptr<jest::pattern_cell> cell(new jest::pattern_cell(
+					shared_ptr<jest::pattern_cell> cell(
+							new jest::pattern_cell(
 								type_pattern, variable_pattern));
 
-					shared_ptr<jest::pattern_cell> list(new jest::pattern_cell(
-								cell, recurse<next_iterator>()(++symbol_position)));
+					shared_ptr<jest::pattern_cell> list(
+							new jest::pattern_cell(cell,
+								recurse<next_iterator>()(++symbol_position)));
 					return list;
 				}
 
@@ -1086,7 +1166,8 @@ namespace jest
 			{
 				shared_ptr<jest::pattern const> pattern =
 					native_calling::pattern_creator<F>()();
-				shared_ptr<native_calling::caller> caller = new native_calling::caller(
+				shared_ptr<native_calling::caller> caller =
+					new native_calling::caller(
 						native_calling::functor_caller<F>(functor));
 
 				shared_ptr<native_evaluator> evaluator(new native_evaluator(
@@ -1117,7 +1198,8 @@ namespace jest
 			shared_ptr<parsing::expression const> expression;
 
 			shared_ptr<evaluator const> operator()(
-					shared_ptr<parsing::prototype const> > const& target_prototype) const
+					shared_ptr<parsing::prototype const> >
+					const& target_prototype) const
 			{
 				shared_ptr<lambda_evaluator> lambda(new lambda_evaluator(
 							evaluator, prototype, expression));
@@ -1125,7 +1207,8 @@ namespace jest
 			}
 
 			shared_ptr<evaluator const> operator()(
-					shared_ptr<parsing::identifier const> const& target_symbol) const
+					shared_ptr<parsing::identifier const> const&
+					target_symbol) const
 			{
 				assert(0);
 			}
@@ -1146,13 +1229,17 @@ namespace jest
 			shared_ptr<evaulation::scope> scope(new evaulation::scope);
 			scope->evaluators.push_back(evaluator);
 
-			for (int i = 0, cnt = int(module_syntax->defines.size()); i < cnt; ++i)
+			for (int i = 0, cnt = int(module_syntax->defines.size());
+					i < cnt; ++i)
 			{
-				shared_ptr<parsing::define const> define = module_syntax->defines[i];
-				scope->evaluators.push_back(evaluate_module_entry(scope, define));
+				shared_ptr<parsing::define const> define =
+					module_syntax->defines[i];
+				scope->evaluators.push_back(
+						evaluate_module_entry(scope, define));
 			}
 
-			shared_ptr<evaluation::module> module(new evaluation::module(scope));
+			shared_ptr<evaluation::module> module(
+					new evaluation::module(scope));
 			return module;
 		}
 	}
