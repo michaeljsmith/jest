@@ -29,6 +29,11 @@ namespace jest {
 
 	namespace types
 	{
+		shared_ptr<void const> const operator_(new int);
+	}
+
+	namespace types
+	{
 		shared_ptr<void const> const symbol(new int);
 		shared_ptr<void const> const get_type_object(shared_ptr<string const>*)
 		{return symbol;}
@@ -165,6 +170,65 @@ namespace jest {namespace primitives {
 		return cell;
 	}
 
+	shared_ptr<typed_value const> car(shared_ptr<typed_cell const> const&
+			list)
+	{
+		return list->head;
+	}
+
+	shared_ptr<typed_value const> car(shared_ptr<typed_value const> const&
+			list)
+	{
+		assert(list->type == types::cell);
+		return car(static_pointer_cast<typed_cell const>(list->value));
+	}
+
+	shared_ptr<typed_cell const> cdr(shared_ptr<typed_cell const> const&
+			list)
+	{
+		return list->tail;
+	}
+
+	shared_ptr<typed_value const> cdr(shared_ptr<typed_value const> const&
+			list)
+	{
+		assert(list->type == types::cell);
+		return cdr(static_pointer_cast<typed_cell const>(list->value));
+	}
+
+	shared_ptr<typed_value const> cadr(shared_ptr<typed_cell const> const&
+			list)
+	{
+		return list->tail->head;
+	}
+
+	shared_ptr<typed_value const> cadr(shared_ptr<typed_value const> const&
+			list)
+	{
+		assert(list->type == types::cell);
+		return cadr(static_pointer_cast<typed_cell const>(list->value));
+	}
+
+	shared_ptr<typed_value const> cddr(shared_ptr<typed_cell const> const&
+			list)
+	{
+		return list->tail->tail;
+	}
+
+	shared_ptr<typed_value const> cddr(shared_ptr<typed_value const> const&
+			list)
+	{
+		assert(list->type == types::cell);
+		return cddr(static_pointer_cast<typed_cell const>(list->value));
+	}
+
+	shared_ptr<string const> as_symbol(shared_ptr<typed_value const> const&
+			value)
+	{
+		assert(value->type == types::symbol);
+		return static_pointer_cast<string const>(value->value);
+	}
+
 	shared_ptr<typed_cell const> nil()
 	{
 		return shared_ptr<typed_cell const>();
@@ -214,7 +278,7 @@ namespace jest {namespace special_symbols {
 		shared_ptr<typed_value const> const symbol(std::string const& text)
 		{
 			return make_shared<typed_value>(
-				typed_value(types::symbol, make_shared<string>("quote")));
+				typed_value(types::symbol, make_shared<string>(text)));
 		}
 	}
 
@@ -223,6 +287,7 @@ namespace jest {namespace special_symbols {
 	shared_ptr<typed_value const> const rule = detail::symbol("rule");
 	shared_ptr<typed_value const> const module = detail::symbol("module");
 	shared_ptr<typed_value const> const pattern = detail::symbol("pattern");
+	shared_ptr<typed_value const> const native = detail::symbol("native");
 }}
 
 namespace jest {namespace patterns {
@@ -1232,6 +1297,117 @@ namespace jest {namespace generation {
 			args = cons(generate_define(module_syntax->defines[i]), args);
 
 		return value(cons(special_symbols::module, args));
+	}
+}}
+
+namespace jest {namespace native {
+
+	struct function
+	{
+		function(void* function): function(function) {}
+		void* function;
+	};
+
+	map<shared_ptr<string const>, function> functions;
+
+	void register_(shared_ptr<string const> const& name, void* function)
+	{
+		functions.insert(make_pair(name, native::function(function)));
+	}
+
+	shared_ptr<typed_value const> call(shared_ptr<string const> const& name)
+	{
+		typedef shared_ptr<typed_value const> (*function_pointer)();
+		function_pointer f = static_cast<function_pointer>(
+				*functions.find(name).second.function);
+		return f();
+	}
+
+	shared_ptr<typed_value const> call(shared_ptr<string const> const& name,
+			shared_ptr<void const> const& x0)
+	{
+		typedef shared_ptr<typed_value const> (*function_pointer)(
+				shared_ptr<void const> const&);
+		function_pointer f = static_cast<function_pointer>(
+				*functions.find(name).second.function);
+		return f(x0);
+	}
+
+	shared_ptr<typed_value const> call_list(
+			shared_ptr<string const> const& name,
+			shared_ptr<typed_cell const> const& args)
+	{
+		switch (length(args))
+		{
+			case 0:
+				call(name);
+				break;
+
+			case 1:
+				call(name, car(args));
+				break;
+
+			default:
+				assert(0);
+				break;
+		}
+	}
+}}
+
+namespace jest {namespace evaluation {
+
+	struct binding
+	{
+		binding(shared_ptr<string const> const& identifier,
+				shared_ptr<typed_value const> const& value,
+				shared_ptr<binding const> const& tail):
+			identifier(identifier), value(value), tail(tail)  {}
+		shared_ptr<string const> identifier;
+		shared_ptr<typed_value const> value;
+		shared_ptr<binding const> tail;
+	};
+
+	shared_ptr<typed_value const> evaluate(
+			shared_ptr<binding const> const& environment,
+			shared_ptr<typed_value const> const& expression)
+	{
+		using namespace primitives;
+
+		if (expression->type == types::symbol)
+		{
+			return;
+		}
+
+		if (expression->type != types::cell)
+		{
+			fatal("Unable to evaluate expression.");
+			return shared_ptr<typed_value const>();
+		}
+
+		shared_ptr<typed_cell const> cell =
+			static_pointer_cast<typed_cell const>(expression);
+		if (cell->head == special_symbols::native)
+		{
+			return native::call(as_symbol(cadr(cell)), cddr(cell));
+		}
+		else if (cell->head == special_symbols::quote)
+		{
+			return cadr(cell);
+		}
+		else
+		{
+			shared_ptr<typed_value const> operator_ =
+					evaluate(environment, cell->head);
+
+			if (operator_->type == types::operator_)
+			{
+				asfasdf;
+			}
+			else
+			{
+				assert(0);
+			}
+		}
 	}
 }}
 
