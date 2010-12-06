@@ -4,6 +4,7 @@
 #include <boost/variant.hpp>
 #include <vector>
 #include <set>
+#include <map>
 #include <cctype>
 #include <cstdarg>
 #include <boost/function.hpp>
@@ -18,6 +19,8 @@
 namespace jest {
 	using namespace boost;
 	using namespace std;
+
+	class fatal_error {};
 
 	struct type {};
 
@@ -170,6 +173,14 @@ namespace jest {namespace primitives {
 		return cell;
 	}
 
+	int length(shared_ptr<typed_cell const> const& l)
+	{
+		int n = 0;
+		for (shared_ptr<typed_cell const>  p = l; p; p = p->tail)
+			++n;
+		return n;
+	}
+
 	shared_ptr<typed_value const> car(shared_ptr<typed_cell const> const&
 			list)
 	{
@@ -179,7 +190,7 @@ namespace jest {namespace primitives {
 	shared_ptr<typed_value const> car(shared_ptr<typed_value const> const&
 			list)
 	{
-		assert(list->type == types::cell);
+		assert(list->type == types::typed_cell);
 		return car(static_pointer_cast<typed_cell const>(list->value));
 	}
 
@@ -189,10 +200,10 @@ namespace jest {namespace primitives {
 		return list->tail;
 	}
 
-	shared_ptr<typed_value const> cdr(shared_ptr<typed_value const> const&
+	shared_ptr<typed_cell const> cdr(shared_ptr<typed_value const> const&
 			list)
 	{
-		assert(list->type == types::cell);
+		assert(list->type == types::typed_cell);
 		return cdr(static_pointer_cast<typed_cell const>(list->value));
 	}
 
@@ -205,20 +216,20 @@ namespace jest {namespace primitives {
 	shared_ptr<typed_value const> cadr(shared_ptr<typed_value const> const&
 			list)
 	{
-		assert(list->type == types::cell);
+		assert(list->type == types::typed_cell);
 		return cadr(static_pointer_cast<typed_cell const>(list->value));
 	}
 
-	shared_ptr<typed_value const> cddr(shared_ptr<typed_cell const> const&
+	shared_ptr<typed_cell const> cddr(shared_ptr<typed_cell const> const&
 			list)
 	{
 		return list->tail->tail;
 	}
 
-	shared_ptr<typed_value const> cddr(shared_ptr<typed_value const> const&
+	shared_ptr<typed_cell const> cddr(shared_ptr<typed_value const> const&
 			list)
 	{
-		assert(list->type == types::cell);
+		assert(list->type == types::typed_cell);
 		return cddr(static_pointer_cast<typed_cell const>(list->value));
 	}
 
@@ -291,8 +302,6 @@ namespace jest {namespace special_symbols {
 }}
 
 namespace jest {namespace patterns {
-	class fatal_error {};
-
 	struct context
 	{
 	};
@@ -1304,8 +1313,8 @@ namespace jest {namespace native {
 
 	struct function
 	{
-		function(void* function): function(function) {}
-		void* function;
+		function(void* pointer): pointer(pointer) {}
+		void* pointer;
 	};
 
 	map<shared_ptr<string const>, function> functions;
@@ -1319,7 +1328,7 @@ namespace jest {namespace native {
 	{
 		typedef shared_ptr<typed_value const> (*function_pointer)();
 		function_pointer f = static_cast<function_pointer>(
-				*functions.find(name).second.function);
+				(*functions.find(name)).second.pointer);
 		return f();
 	}
 
@@ -1329,7 +1338,7 @@ namespace jest {namespace native {
 		typedef shared_ptr<typed_value const> (*function_pointer)(
 				shared_ptr<void const> const&);
 		function_pointer f = static_cast<function_pointer>(
-				*functions.find(name).second.function);
+				(*functions.find(name)).second.pointer);
 		return f(x0);
 	}
 
@@ -1337,24 +1346,36 @@ namespace jest {namespace native {
 			shared_ptr<string const> const& name,
 			shared_ptr<typed_cell const> const& args)
 	{
+		using namespace primitives;
+
 		switch (length(args))
 		{
 			case 0:
-				call(name);
+				return call(name);
 				break;
 
 			case 1:
-				call(name, car(args));
+				return call(name, car(args));
 				break;
 
 			default:
 				assert(0);
+				return shared_ptr<typed_value const>();
 				break;
 		}
 	}
 }}
 
 namespace jest {namespace evaluation {
+
+	void fatal(char const* format, ...)
+	{
+		va_list args;
+		va_start(args, format);
+		vfprintf(stderr, format, args);
+		fputs("\n", stderr);
+		throw fatal_error();
+	}
 
 	struct binding
 	{
@@ -1375,17 +1396,18 @@ namespace jest {namespace evaluation {
 
 		if (expression->type == types::symbol)
 		{
-			return;
+			assert(0);
+			return shared_ptr<typed_value const>();
 		}
 
-		if (expression->type != types::cell)
+		if (expression->type != types::typed_cell)
 		{
 			fatal("Unable to evaluate expression.");
 			return shared_ptr<typed_value const>();
 		}
 
 		shared_ptr<typed_cell const> cell =
-			static_pointer_cast<typed_cell const>(expression);
+			static_pointer_cast<typed_cell const>(expression->value);
 		if (cell->head == special_symbols::native)
 		{
 			return native::call(as_symbol(cadr(cell)), cddr(cell));
@@ -1394,19 +1416,19 @@ namespace jest {namespace evaluation {
 		{
 			return cadr(cell);
 		}
+
+		shared_ptr<typed_value const> operator_ =
+				evaluate(environment, cell->head);
+
+		if (operator_->type == types::operator_)
+		{
+			assert(0);
+			return shared_ptr<typed_value const>();
+		}
 		else
 		{
-			shared_ptr<typed_value const> operator_ =
-					evaluate(environment, cell->head);
-
-			if (operator_->type == types::operator_)
-			{
-				asfasdf;
-			}
-			else
-			{
-				assert(0);
-			}
+			assert(0);
+			return shared_ptr<typed_value const>();
 		}
 	}
 }}
