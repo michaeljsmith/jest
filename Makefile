@@ -36,7 +36,7 @@
 ##############################################################################
 
 # Basic configuration variables.
-config=debug
+config=out
 module_name=jest
 module_source_dir=.
 module_dep_dir=dep
