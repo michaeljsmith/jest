@@ -1395,7 +1395,6 @@ namespace jest {namespace environment {
 	shared_ptr<typed_value const> lookup_default_binding(
 			shared_ptr<typed_value const> const& symbol)
 	{
-		
 		shared_ptr<values::binding const> match;
 		for (shared_ptr<values::binding const> binding = detail::default_env;
 				binding; binding = binding->tail)
@@ -1417,6 +1416,16 @@ namespace jest {namespace environment {
 		detail::default_env = make_shared<binding>(
 				symbol, value, detail::default_env);
 	}
+
+	void push_operator(shared_ptr<typed_value const> const& identifier)
+	{
+		shared_ptr<values::operator_ const> new_operator =
+			make_shared<values::operator_>(shared_ptr<rule const>());
+		push_default_binding(identifier, value(new_operator));
+	}
+
+	shared_ptr<binding const> get_default_environment()
+	{return detail::default_env;}
 }}
 
 namespace jest {namespace native {
@@ -1454,7 +1463,7 @@ namespace jest {namespace native {
 	template <typename S> struct registrar {};
 
 	template <typename X0> struct registrar<
-		shared_ptr<typed_value const>(shared_ptr<X0 const> const&)>
+		shared_ptr<typed_value const>(*)(shared_ptr<X0 const> const&)>
 	{
 		typedef shared_ptr<typed_value const> signature(
 				shared_ptr<X0 const> const&);
@@ -1516,6 +1525,25 @@ namespace jest {namespace native {
 	}
 }}
 
+namespace jest {namespace builtin {namespace debugging {
+	using namespace boost;
+	using namespace values;
+	using namespace primitives;
+
+	shared_ptr<typed_value const> print_symbol(
+			shared_ptr<string const> const& symbol)
+	{
+		puts(symbol->c_str());
+		return value(nil());
+	}
+
+	void register_functions()
+	{
+		environment::push_operator(builtin_symbol("print"));
+		native::register_("print", print_symbol);
+	}
+}}}
+
 namespace jest {namespace evaluation {
 	using namespace values;
 
@@ -1528,6 +1556,77 @@ namespace jest {namespace evaluation {
 		throw fatal_error();
 	}
 
+	shared_ptr<typed_value const> lookup_binding(
+			shared_ptr<typed_value const> const& symbol,
+			shared_ptr<binding const> const& env)
+	{
+		shared_ptr<values::binding const> match;
+		for (shared_ptr<values::binding const> binding = env;
+				binding; binding = binding->tail)
+		{
+			if (binding->identifier == symbol)
+			{
+				match = binding;
+				break;
+			}
+		}
+
+		assert(match);
+		return match->value;
+	}
+
+	shared_ptr<typed_value const> evaluate(
+			shared_ptr<binding const> const& environment,
+			shared_ptr<typed_value const> const& expression);
+
+	shared_ptr<typed_cell const> evaluate_args(
+			shared_ptr<binding const> const& environment,
+			shared_ptr<typed_cell const> const& args)
+	{
+		using namespace primitives;
+
+		if (!args)
+			return nil();
+		return cons(evaluate(environment, args->head),
+				evaluate_args(environment, args->tail));
+	}
+
+	shared_ptr<typed_value const> apply_rules(
+			shared_ptr<rule const> const& rules,
+			shared_ptr<typed_cell const> const& args)
+	{
+		using namespace primitives;
+
+		for (shared_ptr<rule const> rule = rules; rule; rule = rule->tail)
+		{
+			patterns::context c;
+			shared_ptr<patterns::match_result const> match_result = match(
+					&c, rule->pattern->type, rule->pattern->value,
+					types::typed_cell, args);
+
+			if (!match_result)
+				continue;
+
+			shared_ptr<binding const> scope = rule->scope;
+			for (int i = 0, cnt = int(match_result->bindings.size());
+					i < cnt; ++i)
+			{
+				shared_ptr<patterns::binding const> binding =
+					match_result->bindings[i];
+
+				scope = make_shared<values::binding>(
+						symbol(binding->symbol),
+						make_shared<typed_value>(
+							binding->type, binding->value), scope);
+			}
+
+			return evaluate(scope, rule->expression);
+		}
+
+		assert(0);
+		return shared_ptr<typed_value const>();
+	}
+
 	shared_ptr<typed_value const> evaluate(
 			shared_ptr<binding const> const& environment,
 			shared_ptr<typed_value const> const& expression)
@@ -1535,10 +1634,7 @@ namespace jest {namespace evaluation {
 		using namespace primitives;
 
 		if (expression->type == types::symbol)
-		{
-			assert(0);
-			return shared_ptr<typed_value const>();
-		}
+			return lookup_binding(expression, environment);
 
 		if (expression->type != types::typed_cell)
 		{
@@ -1558,13 +1654,18 @@ namespace jest {namespace evaluation {
 			return cadr(cell);
 		}
 
-		shared_ptr<typed_value const> operator_ =
+		shared_ptr<typed_value const> operator_val =
 				evaluate(environment, cell->head);
 
-		if (operator_->type == types::operator_)
+		if (operator_val->type == types::operator_)
 		{
-			assert(0);
-			return shared_ptr<typed_value const>();
+			shared_ptr<values::operator_ const> operator_ =
+				static_pointer_cast<values::operator_ const>(
+						operator_val->value);
+			shared_ptr<typed_cell const> evaluated_args = evaluate_args(
+					environment, cell->tail);
+
+			return apply_rules(operator_->rules, evaluated_args);
 		}
 		else
 		{
@@ -1574,15 +1675,19 @@ namespace jest {namespace evaluation {
 	}
 }}
 
-using namespace boost;
-using namespace jest::values;
-shared_ptr<typed_value const> print_symbol(
-		shared_ptr<string const> const& symbol) {return shared_ptr<typed_value const>();}
-
 int main(int /*argc*/, char* /*argv*/[])
 {
-	jest::native::register_<shared_ptr<typed_value const> (
-			shared_ptr<string const> const& symbol)>("print", &print_symbol);
+	using namespace jest::values;
+	using namespace jest::primitives;
+	using namespace jest::evaluation;
+	using namespace jest::environment;
+
+	jest::builtin::debugging::register_functions();
+	evaluate(
+			get_default_environment(),
+			value(list(
+				builtin_symbol("print"),
+				symbol("hello"))));
 
 	try
 	{
