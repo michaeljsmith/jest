@@ -17,28 +17,22 @@
 #include <boost/make_shared.hpp>
 
 namespace jest {
+	class fatal_error {};
+}
+
+namespace jest {namespace values {
 	using namespace boost;
 	using namespace std;
-
-	class fatal_error {};
-
-	struct type {};
 
 	namespace types
 	{
 		shared_ptr<void const> const type(new int);
-		shared_ptr<void const> const get_type_object(jest::type*) {return type;}
-	}
-
-	namespace types
-	{
-		shared_ptr<void const> const operator_(new int);
 	}
 
 	namespace types
 	{
 		shared_ptr<void const> const symbol(new int);
-		shared_ptr<void const> const get_type_object(shared_ptr<string const>*)
+		shared_ptr<void const> get_type_object_dispatch(string*)
 		{return symbol;}
 	}
 
@@ -53,7 +47,7 @@ namespace jest {
 	namespace types
 	{
 		shared_ptr<void const> const typed_value(new int);
-		shared_ptr<void const> get_type_object(jest::typed_value*)
+		shared_ptr<void const> get_type_object_dispatch(values::typed_value*)
 		{return typed_value;}
 	}
 
@@ -69,10 +63,8 @@ namespace jest {
 	namespace types
 	{
 		shared_ptr<void const> const typed_cell(new int);
-		shared_ptr<void const> get_type_object(jest::typed_cell*)
-		{
-			return typed_cell;
-		}
+		shared_ptr<void const> get_type_object_dispatch(values::typed_cell*)
+		{return typed_cell;}
 	}
 
 	struct pattern
@@ -117,10 +109,53 @@ namespace jest {
 	{
 		shared_ptr<void const> const value(new int);
 	}
-}
+
+	struct binding
+	{
+		binding(shared_ptr<string const> const& identifier,
+				shared_ptr<typed_value const> const& value,
+				shared_ptr<binding const> const& tail):
+			identifier(identifier), value(value), tail(tail)  {}
+		shared_ptr<string const> identifier;
+		shared_ptr<typed_value const> value;
+		shared_ptr<binding const> tail;
+	};
+
+	struct rule
+	{
+		rule(
+				shared_ptr<values::pattern const> pattern,
+				shared_ptr<typed_value const> expression,
+				shared_ptr<binding const> scope,
+				shared_ptr<rule const> tail):
+			pattern(pattern), expression(expression),
+			scope(scope), tail(tail) {}
+
+		shared_ptr<values::pattern const> pattern;
+		shared_ptr<typed_value const> expression;
+		shared_ptr<binding const> scope;
+		shared_ptr<rule const> tail;
+	};
+
+	struct operator_
+	{
+		shared_ptr<rule const> rules;
+	};
+
+	namespace types
+	{
+		shared_ptr<void const> const operator_(new int);
+	}
+
+	template <typename T> shared_ptr<void const> get_type_object()
+	{
+		return types::get_type_object_dispatch(static_cast<T*>(0));
+	}
+}}
 
 namespace jest {namespace pattern_primitives {
 	using namespace boost;
+	using namespace values;
 
 	shared_ptr<pattern const> pattern_nil()
 	{
@@ -140,6 +175,14 @@ namespace jest {namespace pattern_primitives {
 namespace jest {namespace primitives {
 	using namespace std;
 	using namespace boost;
+	using namespace values;
+
+	template <typename T> shared_ptr<T const> downcast(
+			shared_ptr<typed_value const> const& value)
+	{
+		assert(value->type == get_type_object<T>());
+		return static_pointer_cast<T const>(value->value);
+	}
 
 	struct symbol_less : public less<shared_ptr<typed_value const> >
 	{
@@ -152,6 +195,14 @@ namespace jest {namespace primitives {
 	};
 
 	shared_ptr<typed_value const> symbol(string const& text)
+	{
+		static set<shared_ptr<typed_value const>, symbol_less> symbols;
+		return *symbols.insert(make_shared<typed_value>(
+						types::symbol,
+						make_shared<string>(text))).first;
+	}
+
+	shared_ptr<typed_value const> builtin_symbol(string const& text)
 	{
 		static set<shared_ptr<typed_value const>, symbol_less> symbols;
 		return *symbols.insert(make_shared<typed_value>(
@@ -274,6 +325,20 @@ namespace jest {namespace primitives {
 	{
 		return cons(x0, list(x1, x2, x3));
 	}
+
+	shared_ptr<typed_value const> pop(shared_ptr<typed_cell const>& list)
+	{
+		shared_ptr<typed_value const> value = list->head;
+		list = list->tail;
+		return value;
+	}
+
+	shared_ptr<operator_ const> as_operator(shared_ptr<typed_value const>
+			const& value)
+	{
+		assert(value->type == types::operator_);
+		return static_pointer_cast<operator_ const>(value->value);
+	}
 }}
 
 namespace jest {namespace values {
@@ -283,6 +348,7 @@ namespace jest {namespace values {
 
 namespace jest {namespace special_symbols {
 	using namespace boost;
+	using namespace values;
 
 	namespace detail
 	{
@@ -302,6 +368,8 @@ namespace jest {namespace special_symbols {
 }}
 
 namespace jest {namespace patterns {
+	using namespace values;
+
 	struct context
 	{
 	};
@@ -390,8 +458,8 @@ namespace jest {namespace patterns {
 	{
 		if (pattern_type == pattern_types::constant)
 		{
-			shared_ptr<jest::typed_value const> pattern_typed_value =
-				static_pointer_cast<jest::typed_value const>(
+			shared_ptr<typed_value const> pattern_typed_value =
+				static_pointer_cast<typed_value const>(
 						pattern_value);
 			if (!equal(c, pattern_typed_value->type,
 						pattern_typed_value->value, type, value))
@@ -419,8 +487,8 @@ namespace jest {namespace patterns {
 			{
 				if (type != types::typed_cell)
 					return shared_ptr<match_result const>();
-				shared_ptr<jest::pattern_cell const> pattern_cell =
-					static_pointer_cast<jest::pattern_cell const>(
+				shared_ptr<values::pattern_cell const> pattern_cell =
+					static_pointer_cast<values::pattern_cell const>(
 							pattern_value);
 				shared_ptr<typed_cell const> cell =
 					static_pointer_cast<typed_cell const>(value);
@@ -436,11 +504,11 @@ namespace jest {namespace patterns {
 			{
 				if (type != types::typed_value)
 					return shared_ptr<match_result const>();
-				shared_ptr<jest::pattern_value const> pattern_typed_value =
-					static_pointer_cast<jest::pattern_value const>(
+				shared_ptr<values::pattern_value const> pattern_typed_value =
+					static_pointer_cast<values::pattern_value const>(
 							pattern_value);
-				shared_ptr<jest::typed_value const> typed_value =
-					static_pointer_cast<jest::typed_value const>(value);
+				shared_ptr<values::typed_value const> typed_value =
+					static_pointer_cast<values::typed_value const>(value);
 
 				pattern_head = pattern_typed_value->type;
 				pattern_tail = pattern_typed_value->value;
@@ -513,7 +581,9 @@ namespace jest {namespace patterns {
 	} while (0)
 
 namespace jest {namespace parsing {
-	class fatal_error {};
+
+	using namespace boost;
+	using namespace std;
 
 	typedef std::string identifier;
 
@@ -1176,6 +1246,7 @@ namespace jest {namespace parsing {
 namespace jest {namespace generation {
 
 	using namespace boost;
+	using namespace values;
 
 	shared_ptr<typed_value const> generate_expression(
 			shared_ptr<parsing::expression const> const& parse_expression);
@@ -1311,62 +1382,129 @@ namespace jest {namespace generation {
 
 namespace jest {namespace native {
 
-	struct function
+	using namespace boost;
+	using namespace values;
+
+	typedef function<shared_ptr<typed_value const>
+		(shared_ptr<typed_cell const> const& args)> native_function;
+
+	//template <typename F> struct pattern_creator
+	//{
+	//	typedef F function_type;
+	//	typedef typename
+	//		parameter_types<function_type>::type parameter_types;
+	//	typedef typename
+	//		begin<parameter_types>::type parameters_begin;
+	//	typedef typename
+	//		end<parameter_types>::type parameters_end;
+
+	//	shared_ptr<pattern const> operator()()
+	//	{
+	//		int parameter_count = function_arity<function_type>::value;
+	//		std::vector<shared_ptr<string> > labels(parameter_count);
+	//		for (int i = 0; i < parameter_count; ++i)
+	//		{
+	//			shared_ptr<string> label(new string(string("prm")
+	//						+ lexical_cast<string>(i)));
+	//			labels[i] = label;
+	//		}
+
+	//		return recurse<parameters_begin>()(labels.begin());
+	//	}
+
+	//	template <typename I> shared_ptr<pattern const> recurse(I*,
+	//			vector<shared_ptr<string const> >::iterator
+	//			symbol_position) const
+	//	{
+	//		typedef typename deref<I>::type parameter_type;
+	//		typedef typename next<I>::type next_iterator;
+
+	//		shared_ptr<string const> symbol = *symbol_position;
+
+	//		shared_ptr<void const> pattern_type =
+	//			types::get_type_object(
+	//					static_cast<parameter_type*>(0));
+	//		shared_ptr<jest::pattern> type_pattern(
+	//				new jest::pattern(
+	//					pattern_types::constant, pattern_type));
+	//		shared_ptr<jest::pattern> variable_pattern(
+	//				new jest::pattern(
+	//					pattern_types::variable, symbol));
+	//		shared_ptr<jest::pattern_cell> cell(
+	//				new jest::pattern_cell(
+	//					type_pattern, variable_pattern));
+
+	//		shared_ptr<jest::pattern_cell> list(
+	//				new jest::pattern_cell(cell,
+	//					recurse<next_iterator>()(++symbol_position)));
+	//		return list;
+	//	}
+
+	//	shared_ptr<pattern const> recurse(parameters_end*,
+	//			vector<shared_ptr<string const> >::iterator) const
+	//	{
+	//		shared_ptr<jest::pattern> pattern = new jest::pattern(
+	//				pattern_types::cell, shared_ptr<void>());
+	//		return pattern;
+	//	}
+	//};
+	
+	template <typename S> struct registrar {};
+
+	template <typename X0> struct registrar<
+		shared_ptr<typed_value const>(shared_ptr<X0 const> const&)>
 	{
-		function(void* pointer): pointer(pointer) {}
-		void* pointer;
+		typedef shared_ptr<typed_value const> signature(
+				shared_ptr<X0 const> const&);
+
+		struct caller
+		{
+			caller(signature* fn): fn(fn) {}
+			signature* fn;
+
+			shared_ptr<typed_value const> operator()(
+					shared_ptr<typed_cell const> const& args) const
+			{
+				using namespace primitives;
+
+				shared_ptr<typed_cell const> args_left = args;
+				shared_ptr<X0 const> x0 = downcast<X0>(pop(args_left));
+				assert(args_left == nil());
+				return this->fn(x0);
+			}
+		};
+
+		void operator()(string const& operator_name, signature* fn) const
+		{
+			typedef shared_ptr<typed_value const> erased_signature(
+					shared_ptr<typed_cell const> const& args);
+
+			shared_ptr<function<erased_signature> > caller_fn =
+				make_shared<function<erased_signature> >(caller(fn));
+
+			//shared_ptr<values::operator_ const> old_operator =
+			//	as_operator(lookup_default_binding(
+			//				builtin_symbol(operator_name)));
+
+			//shared_ptr<values::operator_ const> new_operator =
+			//	make_shared<values::operator_>(
+			//			make_shared<values::rule>(
+			//	shared_ptr<values::pattern const> pattern,
+			//	shared_ptr<typed_value const> expression,
+			//	shared_ptr<binding const> scope,
+			//	shared_ptr<rule const> tail):
+		}
 	};
 
-	map<shared_ptr<string const>, function> functions;
-
-	void register_(shared_ptr<string const> const& name, void* function)
+	template <typename F> void register_(
+			string const& operator_name, F fn)
 	{
-		functions.insert(make_pair(name, native::function(function)));
-	}
-
-	shared_ptr<typed_value const> call(shared_ptr<string const> const& name)
-	{
-		typedef shared_ptr<typed_value const> (*function_pointer)();
-		function_pointer f = static_cast<function_pointer>(
-				(*functions.find(name)).second.pointer);
-		return f();
-	}
-
-	shared_ptr<typed_value const> call(shared_ptr<string const> const& name,
-			shared_ptr<void const> const& x0)
-	{
-		typedef shared_ptr<typed_value const> (*function_pointer)(
-				shared_ptr<void const> const&);
-		function_pointer f = static_cast<function_pointer>(
-				(*functions.find(name)).second.pointer);
-		return f(x0);
-	}
-
-	shared_ptr<typed_value const> call_list(
-			shared_ptr<string const> const& name,
-			shared_ptr<typed_cell const> const& args)
-	{
-		using namespace primitives;
-
-		switch (length(args))
-		{
-			case 0:
-				return call(name);
-				break;
-
-			case 1:
-				return call(name, car(args));
-				break;
-
-			default:
-				assert(0);
-				return shared_ptr<typed_value const>();
-				break;
-		}
+		registrar<F>()(operator_name, fn);
 	}
 }}
 
 namespace jest {namespace evaluation {
+	using namespace values;
 
 	void fatal(char const* format, ...)
 	{
@@ -1376,17 +1514,6 @@ namespace jest {namespace evaluation {
 		fputs("\n", stderr);
 		throw fatal_error();
 	}
-
-	struct binding
-	{
-		binding(shared_ptr<string const> const& identifier,
-				shared_ptr<typed_value const> const& value,
-				shared_ptr<binding const> const& tail):
-			identifier(identifier), value(value), tail(tail)  {}
-		shared_ptr<string const> identifier;
-		shared_ptr<typed_value const> value;
-		shared_ptr<binding const> tail;
-	};
 
 	shared_ptr<typed_value const> evaluate(
 			shared_ptr<binding const> const& environment,
@@ -1410,7 +1537,8 @@ namespace jest {namespace evaluation {
 			static_pointer_cast<typed_cell const>(expression->value);
 		if (cell->head == special_symbols::native)
 		{
-			return native::call(as_symbol(cadr(cell)), cddr(cell));
+			assert(0);
+			return shared_ptr<typed_value const>();
 		}
 		else if (cell->head == special_symbols::quote)
 		{
@@ -1433,14 +1561,22 @@ namespace jest {namespace evaluation {
 	}
 }}
 
+using namespace boost;
+using namespace jest::values;
+shared_ptr<typed_value const> print_symbol(
+		shared_ptr<string const> const& symbol) {}
+
 int main(int /*argc*/, char* /*argv*/[])
 {
+	jest::native::register_<shared_ptr<typed_value const> (
+			shared_ptr<string const> const& symbol)>("print", &print_symbol);
+
 	try
 	{
 		boost::shared_ptr<jest::parsing::module const> module_ast =
 			jest::parsing::parse_file("test/test.jest");
 	}
-	catch (jest::parsing::fatal_error /*e*/)
+	catch (jest::fatal_error /*e*/)
 	{
 		fprintf(stderr, "Unrecoverable error; exitting.\n");
 		return 1;
