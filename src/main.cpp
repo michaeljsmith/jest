@@ -112,11 +112,11 @@ namespace jest {namespace values {
 
 	struct binding
 	{
-		binding(shared_ptr<string const> const& identifier,
+		binding(shared_ptr<typed_value const> const& identifier,
 				shared_ptr<typed_value const> const& value,
 				shared_ptr<binding const> const& tail):
 			identifier(identifier), value(value), tail(tail)  {}
-		shared_ptr<string const> identifier;
+		shared_ptr<typed_value const> identifier;
 		shared_ptr<typed_value const> value;
 		shared_ptr<binding const> tail;
 	};
@@ -139,12 +139,21 @@ namespace jest {namespace values {
 
 	struct operator_
 	{
+		operator_(shared_ptr<rule const> const& rules): rules(rules) {}
 		shared_ptr<rule const> rules;
 	};
 
 	namespace types
 	{
 		shared_ptr<void const> const operator_(new int);
+		shared_ptr<void const> get_type_object_dispatch(values::operator_*)
+		{return operator_;}
+	}
+
+	shared_ptr<typed_value const> value(
+			shared_ptr<operator_ const> const& cell)
+	{
+		return make_shared<typed_value const>(types::operator_, cell);
 	}
 
 	template <typename T> shared_ptr<void const> get_type_object()
@@ -331,13 +340,6 @@ namespace jest {namespace primitives {
 		shared_ptr<typed_value const> value = list->head;
 		list = list->tail;
 		return value;
-	}
-
-	shared_ptr<operator_ const> as_operator(shared_ptr<typed_value const>
-			const& value)
-	{
-		assert(value->type == types::operator_);
-		return static_pointer_cast<operator_ const>(value->value);
 	}
 }}
 
@@ -1380,6 +1382,43 @@ namespace jest {namespace generation {
 	}
 }}
 
+namespace jest {namespace environment {
+	using namespace std;
+	using namespace boost;
+	using namespace values;
+
+	namespace detail
+	{
+		shared_ptr<binding const> default_env;
+	}
+
+	shared_ptr<typed_value const> lookup_default_binding(
+			shared_ptr<typed_value const> const& symbol)
+	{
+		
+		shared_ptr<values::binding const> match;
+		for (shared_ptr<values::binding const> binding = detail::default_env;
+				binding; binding = binding->tail)
+		{
+			if (binding->identifier == symbol)
+			{
+				match = binding;
+				break;
+			}
+		}
+
+		assert(match);
+		return match->value;
+	}
+
+	void push_default_binding(shared_ptr<typed_value const> const& symbol,
+			shared_ptr<typed_value const> const& value)
+	{
+		detail::default_env = make_shared<binding>(
+				symbol, value, detail::default_env);
+	}
+}}
+
 namespace jest {namespace native {
 
 	using namespace boost;
@@ -1388,67 +1427,30 @@ namespace jest {namespace native {
 	typedef function<shared_ptr<typed_value const>
 		(shared_ptr<typed_cell const> const& args)> native_function;
 
-	//template <typename F> struct pattern_creator
-	//{
-	//	typedef F function_type;
-	//	typedef typename
-	//		parameter_types<function_type>::type parameter_types;
-	//	typedef typename
-	//		begin<parameter_types>::type parameters_begin;
-	//	typedef typename
-	//		end<parameter_types>::type parameters_end;
+	template <typename T> void process_arg(
+			shared_ptr<values::pattern const>& pattern,
+			shared_ptr<typed_cell const>& expression,
+			shared_ptr<typed_value const> const& symbol)
+	{
+		using namespace primitives;
+		using namespace pattern_primitives;
 
-	//	shared_ptr<pattern const> operator()()
-	//	{
-	//		int parameter_count = function_arity<function_type>::value;
-	//		std::vector<shared_ptr<string> > labels(parameter_count);
-	//		for (int i = 0; i < parameter_count; ++i)
-	//		{
-	//			shared_ptr<string> label(new string(string("prm")
-	//						+ lexical_cast<string>(i)));
-	//			labels[i] = label;
-	//		}
+		shared_ptr<void const> type_object = get_type_object<T>();
 
-	//		return recurse<parameters_begin>()(labels.begin());
-	//	}
+		// Create the pattern for matching this argument.
+		shared_ptr<values::pattern const> arg_pattern =
+			make_shared<values::pattern>(pattern_types::value,
+					make_shared<values::pattern_value>(
+						make_shared<values::pattern>(
+							pattern_types::constant, type_object),
+						make_shared<values::pattern>(
+							pattern_types::variable, symbol)));
+		pattern = pattern_cons(arg_pattern, pattern);
 
-	//	template <typename I> shared_ptr<pattern const> recurse(I*,
-	//			vector<shared_ptr<string const> >::iterator
-	//			symbol_position) const
-	//	{
-	//		typedef typename deref<I>::type parameter_type;
-	//		typedef typename next<I>::type next_iterator;
+		// Create a reference to this argument in the expression.
+		expression = cons(symbol, expression);
+	}
 
-	//		shared_ptr<string const> symbol = *symbol_position;
-
-	//		shared_ptr<void const> pattern_type =
-	//			types::get_type_object(
-	//					static_cast<parameter_type*>(0));
-	//		shared_ptr<jest::pattern> type_pattern(
-	//				new jest::pattern(
-	//					pattern_types::constant, pattern_type));
-	//		shared_ptr<jest::pattern> variable_pattern(
-	//				new jest::pattern(
-	//					pattern_types::variable, symbol));
-	//		shared_ptr<jest::pattern_cell> cell(
-	//				new jest::pattern_cell(
-	//					type_pattern, variable_pattern));
-
-	//		shared_ptr<jest::pattern_cell> list(
-	//				new jest::pattern_cell(cell,
-	//					recurse<next_iterator>()(++symbol_position)));
-	//		return list;
-	//	}
-
-	//	shared_ptr<pattern const> recurse(parameters_end*,
-	//			vector<shared_ptr<string const> >::iterator) const
-	//	{
-	//		shared_ptr<jest::pattern> pattern = new jest::pattern(
-	//				pattern_types::cell, shared_ptr<void>());
-	//		return pattern;
-	//	}
-	//};
-	
 	template <typename S> struct registrar {};
 
 	template <typename X0> struct registrar<
@@ -1476,23 +1478,34 @@ namespace jest {namespace native {
 
 		void operator()(string const& operator_name, signature* fn) const
 		{
+			using namespace primitives;
+			using namespace environment;
+
 			typedef shared_ptr<typed_value const> erased_signature(
 					shared_ptr<typed_cell const> const& args);
 
 			shared_ptr<function<erased_signature> > caller_fn =
 				make_shared<function<erased_signature> >(caller(fn));
 
-			//shared_ptr<values::operator_ const> old_operator =
-			//	as_operator(lookup_default_binding(
-			//				builtin_symbol(operator_name)));
+			shared_ptr<values::operator_ const> old_operator =
+				downcast<operator_>(lookup_default_binding(
+							builtin_symbol(operator_name)));
 
-			//shared_ptr<values::operator_ const> new_operator =
-			//	make_shared<values::operator_>(
-			//			make_shared<values::rule>(
-			//	shared_ptr<values::pattern const> pattern,
-			//	shared_ptr<typed_value const> expression,
-			//	shared_ptr<binding const> scope,
-			//	shared_ptr<rule const> tail):
+			// Generate a rule to invoke the native form.
+			shared_ptr<values::pattern const> pattern;
+			shared_ptr<values::typed_cell const> expression;
+			process_arg<X0>(pattern, expression, builtin_symbol("_0"));
+
+			shared_ptr<values::operator_ const> new_operator =
+				make_shared<values::operator_>(
+						make_shared<values::rule>(
+							pattern,
+							value(expression),
+							shared_ptr<binding const>(),
+							old_operator->rules));
+
+			push_default_binding(builtin_symbol(operator_name),
+					value(new_operator));
 		}
 	};
 
@@ -1564,7 +1577,7 @@ namespace jest {namespace evaluation {
 using namespace boost;
 using namespace jest::values;
 shared_ptr<typed_value const> print_symbol(
-		shared_ptr<string const> const& symbol) {}
+		shared_ptr<string const> const& symbol) {return shared_ptr<typed_value const>();}
 
 int main(int /*argc*/, char* /*argv*/[])
 {
