@@ -459,7 +459,8 @@ namespace jest {namespace patterns {
 
 	struct binding
 	{
-		binding(shared_ptr<typed_value const> symbol, shared_ptr<void const> type,
+		binding(shared_ptr<typed_value const> symbol,
+				shared_ptr<void const> type,
 				shared_ptr<void const> value)
 			: symbol(symbol), type(type), value(value) {}
 		shared_ptr<typed_value const> symbol;
@@ -476,7 +477,8 @@ namespace jest {namespace patterns {
 			context* c,
 			shared_ptr<void const> const& pattern_type,
 			shared_ptr<void const> const& pattern_value,
-			shared_ptr<void const> const& type, shared_ptr<void const> const& value)
+			shared_ptr<void const> const& type,
+			shared_ptr<void const> const& value)
 	{
 		if (pattern_type == pattern_types::constant)
 		{
@@ -1316,7 +1318,7 @@ namespace jest {namespace generation {
 		using namespace primitives;
 
 		shared_ptr<typed_cell const> args = nil();
-		for (int prm = int(parameters.size()) - 1; prm >= 0; ++prm)
+		for (int prm = int(parameters.size()) - 1; prm >= 0; --prm)
 		{
 			args = cons(
 					value(list(
@@ -1819,28 +1821,32 @@ namespace jest {namespace evaluation {
 
 int main(int /*argc*/, char* /*argv*/[])
 {
+	using namespace boost;
 	using namespace jest;
 	using namespace values;
 	using namespace primitives;
 	using namespace evaluation;
 	using namespace environment;
 
-	jest::builtin::debugging::register_functions();
-	evaluate(
-			get_default_environment(),
-			value(list(
-				builtin_symbol("print"),
-				value(list(special_symbols::quote,
-						value(list(symbol("hello"))))))));
-	printf("\n");
-	fgetc(stdin);
-
 	try
 	{
-		boost::shared_ptr<jest::parsing::module const> module_ast =
-			jest::parsing::parse_file("test/test.jest");
+		shared_ptr<parsing::module const> module_ast =
+			parsing::parse_file("test/test.jest");
+
+		shared_ptr<typed_value const> module_expression =
+			generation::generate_module(module_ast);
+
+		builtin::debugging::register_functions();
+
+		evaluate(
+				get_default_environment(),
+				value(list(
+						builtin_symbol("print"),
+						value(list(special_symbols::quote,
+								module_expression)))));
+		printf("\n");
 	}
-	catch (jest::fatal_error /*e*/)
+	catch (fatal_error /*e*/)
 	{
 		fprintf(stderr, "Unrecoverable error; exitting.\n");
 		return 1;

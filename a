@@ -1,0 +1,12 @@
+(module
+	(rule testui (pattern (n int))
+		  (frame
+
+			(rule foo (pattern (x string)) (label x))
+
+			(bind s (lexical n))
+
+			(horizontal
+			  (foo s)
+			  (edit s)))))
+
