@@ -137,9 +137,17 @@ namespace jest {namespace values {
 		shared_ptr<rule const> tail;
 	};
 
+	enum scoping_policy
+	{
+		scoping_policy_dynamic,
+		scoping_policy_static
+	};
+
 	struct operator_
 	{
-		operator_(shared_ptr<rule const> const& rules): rules(rules) {}
+		operator_(values::scoping_policy scoping_policy,
+				shared_ptr<rule const> const& rules): rules(rules) {}
+		values::scoping_policy scoping_policy;
 		shared_ptr<rule const> rules;
 	};
 
@@ -1431,10 +1439,11 @@ namespace jest {namespace environment {
 				symbol, value, detail::default_env);
 	}
 
-	void push_operator(shared_ptr<typed_value const> const& identifier)
+	void push_operator(shared_ptr<typed_value const> const& identifier,
+			scoping_policy scoping)
 	{
 		shared_ptr<values::operator_ const> new_operator =
-			make_shared<values::operator_>(shared_ptr<rule const>());
+			make_shared<values::operator_>(scoping, shared_ptr<rule const>());
 		push_default_binding(identifier, value(new_operator));
 	}
 
@@ -1508,9 +1517,12 @@ namespace jest {namespace native {
 	template <typename S> struct registrar {};
 
 	template <typename X0> struct registrar<
-		shared_ptr<typed_value const>(*)(shared_ptr<X0 const> const&)>
+		shared_ptr<typed_value const>(*)(
+				shared_ptr<binding const> const& environment,
+				shared_ptr<X0 const> const&)>
 	{
 		typedef shared_ptr<typed_value const> signature(
+				shared_ptr<binding const> const& environment,
 				shared_ptr<X0 const> const&);
 
 		struct caller
@@ -1519,6 +1531,7 @@ namespace jest {namespace native {
 			signature* fn;
 
 			shared_ptr<typed_value const> operator()(
+					shared_ptr<binding const> const& environment,
 					shared_ptr<typed_cell const> const& args) const
 			{
 				using namespace primitives;
@@ -1527,7 +1540,7 @@ namespace jest {namespace native {
 				typedef typename argument_type_of<X0>::type a0;
 				shared_ptr<a0 const> x0 = downcast<a0>(pop(args_left));
 				assert(args_left == nil());
-				return this->fn(x0);
+				return this->fn(environment, x0);
 			}
 		};
 
@@ -1538,6 +1551,7 @@ namespace jest {namespace native {
 			using namespace environment;
 
 			typedef shared_ptr<typed_value const> erased_signature(
+					shared_ptr<binding const> const& environment,
 					shared_ptr<typed_cell const> const& args);
 
 			shared_ptr<function<erased_signature> > caller_fn =
@@ -1565,6 +1579,7 @@ namespace jest {namespace native {
 			// Replace the old operator by rebinding a new one over the top.
 			shared_ptr<values::operator_ const> new_operator =
 				make_shared<values::operator_>(
+						old_operator->scoping_policy,
 						make_shared<values::rule>(
 							pattern,
 							value(expression),
@@ -1589,19 +1604,28 @@ namespace jest {namespace builtin {namespace debugging {
 	using namespace primitives;
 
 	shared_ptr<typed_value const> print_symbol(
+			shared_ptr<binding const> const& environment,
 			shared_ptr<string const> const& symbol)
 	{
 		puts(symbol->c_str());
 		return value(nil());
 	}
 
+	shared_ptr<typed_value const> print_list(
+			shared_ptr<binding const> const& environment,
+			shared_ptr<typed_cell const> const& list)
+	{
+		puts("(");
+		return value(nil());
+	}
+
 	void register_functions()
 	{
-		environment::push_operator(builtin_symbol("print"));
+		environment::push_operator(builtin_symbol("print"),
+				scoping_policy_dynamic);
 		native::register_("print", print_symbol);
 	}
 }}}
-
 namespace jest {namespace builtin {namespace modules {
 	using namespace boost;
 	using namespace values;
@@ -1669,6 +1693,8 @@ namespace jest {namespace evaluation {
 	}
 
 	shared_ptr<typed_value const> apply_rules(
+			scoping_policy scoping,
+			shared_ptr<binding const> const& environment,
 			shared_ptr<rule const> const& rules,
 			shared_ptr<typed_cell const> const& args)
 	{
@@ -1684,7 +1710,14 @@ namespace jest {namespace evaluation {
 			if (!match_result)
 				continue;
 
-			shared_ptr<binding const> scope = rule->scope;
+			// Determine what bindings to pass, based on the scoping policy of 
+			// the operator.
+			shared_ptr<binding const> scope;
+			switch (scoping)
+			{
+				case scoping_policy_dynamic: scope = environment; break;
+				case scoping_policy_static: scope = rule->scope; break;
+			}
 			for (int i = 0, cnt = int(match_result->bindings.size());
 					i < cnt; ++i)
 			{
@@ -1727,13 +1760,15 @@ namespace jest {namespace evaluation {
 		{
 			// Extract the boost::function object from the list.
 			typedef shared_ptr<typed_value const> erased_signature(
+					shared_ptr<binding const> const& environment,
 					shared_ptr<typed_cell const> const& args);
 			shared_ptr<function<erased_signature> const> caller_fn =
 				static_pointer_cast<function<erased_signature> const>(
 						cadr(cell)->value);
 
 			// Call the native function via the function object.
-			return (*caller_fn)(evaluate_args(environment, cddr(cell)));
+			return (*caller_fn)(environment,
+					evaluate_args(environment, cddr(cell)));
 		}
 		else if (cell->head == special_symbols::quote)
 		{
@@ -1752,7 +1787,8 @@ namespace jest {namespace evaluation {
 			shared_ptr<typed_cell const> evaluated_args = evaluate_args(
 					environment, cell->tail);
 
-			return apply_rules(operator_->rules, evaluated_args);
+			return apply_rules(operator_->scoping_policy,
+					environment, operator_->rules, evaluated_args);
 		}
 		else
 		{
