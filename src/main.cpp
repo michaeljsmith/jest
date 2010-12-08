@@ -146,7 +146,8 @@ namespace jest {namespace values {
 	struct operator_
 	{
 		operator_(values::scoping_policy scoping_policy,
-				shared_ptr<rule const> const& rules): rules(rules) {}
+				shared_ptr<rule const> const& rules):
+		scoping_policy(scoping_policy), rules(rules) {}
 		values::scoping_policy scoping_policy;
 		shared_ptr<rule const> rules;
 	};
@@ -1607,15 +1608,31 @@ namespace jest {namespace builtin {namespace debugging {
 			shared_ptr<binding const> const& environment,
 			shared_ptr<string const> const& symbol)
 	{
-		puts(symbol->c_str());
+		fputs(symbol->c_str(), stdout);
 		return value(nil());
 	}
 
 	shared_ptr<typed_value const> print_list(
 			shared_ptr<binding const> const& environment,
-			shared_ptr<typed_cell const> const& list)
+			shared_ptr<typed_cell const> const& ls)
 	{
-		puts("(");
+		fputs("(", stdout);
+
+		for (shared_ptr<typed_cell const> tail = ls; tail;
+				tail = tail->tail)
+		{
+			evaluation::evaluate(environment,
+					value(list(
+							builtin_symbol("print"),
+							value(list(special_symbols::quote,
+									tail->head)))));
+
+			if (tail->tail)
+				fputs(" ", stdout);
+		}
+
+		fputs(")", stdout);
+
 		return value(nil());
 	}
 
@@ -1624,8 +1641,10 @@ namespace jest {namespace builtin {namespace debugging {
 		environment::push_operator(builtin_symbol("print"),
 				scoping_policy_dynamic);
 		native::register_("print", print_symbol);
+		native::register_("print", print_list);
 	}
 }}}
+
 namespace jest {namespace builtin {namespace modules {
 	using namespace boost;
 	using namespace values;
@@ -1811,7 +1830,8 @@ int main(int /*argc*/, char* /*argv*/[])
 			get_default_environment(),
 			value(list(
 				builtin_symbol("print"),
-				value(list(special_symbols::quote, symbol("hello"))))));
+				value(list(special_symbols::quote,
+						value(list(symbol("hello"))))))));
 	printf("\n");
 	fgetc(stdin);
 
