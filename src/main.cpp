@@ -439,10 +439,10 @@ namespace jest {namespace patterns {
 
 	struct binding
 	{
-		binding(std::string symbol, shared_ptr<void const> type,
+		binding(shared_ptr<typed_value const> symbol, shared_ptr<void const> type,
 				shared_ptr<void const> value)
 			: symbol(symbol), type(type), value(value) {}
-		std::string symbol;
+		shared_ptr<typed_value const> symbol;
 		shared_ptr<void const> type;
 		shared_ptr<void const> value;
 	};
@@ -454,9 +454,9 @@ namespace jest {namespace patterns {
 
 	shared_ptr<match_result const> match(
 			context* c,
-			shared_ptr<void const> pattern_type,
-			shared_ptr<void const> pattern_value,
-			shared_ptr<void const> type, shared_ptr<void const> value)
+			shared_ptr<void const> const& pattern_type,
+			shared_ptr<void const> const& pattern_value,
+			shared_ptr<void const> const& type, shared_ptr<void const> const& value)
 	{
 		if (pattern_type == pattern_types::constant)
 		{
@@ -471,13 +471,20 @@ namespace jest {namespace patterns {
 		}
 		else if (pattern_type == pattern_types::variable)
 		{
-			shared_ptr<string const> pattern_symbol =
-				static_pointer_cast<string const>(pattern_value);
+			shared_ptr<typed_value const> pattern_symbol =
+				static_pointer_cast<typed_value const>(pattern_value);
 			shared_ptr<patterns::binding> binding(new patterns::binding(
-						*pattern_symbol, type, value));
+						pattern_symbol, type, value));
 			shared_ptr<match_result> result(new match_result);
 			result->bindings.push_back(binding);
 			return result;
+		}
+		else if (pattern_type == pattern_types::cell && !pattern_value)
+		{
+			// We need to match an empty list.
+			if (type != types::typed_cell)
+				return shared_ptr<match_result const>();
+			return make_shared<match_result>();
 		}
 		else if (pattern_type == pattern_types::cell ||
 				pattern_type == pattern_types::value)
@@ -504,20 +511,16 @@ namespace jest {namespace patterns {
 			}
 			else
 			{
-				if (type != types::typed_value)
-					return shared_ptr<match_result const>();
 				shared_ptr<values::pattern_value const> pattern_typed_value =
 					static_pointer_cast<values::pattern_value const>(
 							pattern_value);
-				shared_ptr<values::typed_value const> typed_value =
-					static_pointer_cast<values::typed_value const>(value);
 
 				pattern_head = pattern_typed_value->type;
 				pattern_tail = pattern_typed_value->value;
-				value_head_type = types::typed_value;
-				value_head_value = typed_value->type;
-				value_tail_type = typed_value->type;
-				value_tail_value = typed_value->value;
+				value_head_type = types::type;
+				value_head_value = type;
+				value_tail_type = type;
+				value_tail_value = value;
 			}
 
 			shared_ptr<match_result const> head_result = match(c,
@@ -1451,7 +1454,9 @@ namespace jest {namespace native {
 			make_shared<values::pattern>(pattern_types::value,
 					make_shared<values::pattern_value>(
 						make_shared<values::pattern>(
-							pattern_types::constant, type_object),
+							pattern_types::constant,
+							make_shared<values::typed_value>(
+								types::type, type_object)),
 						make_shared<values::pattern>(
 							pattern_types::variable, symbol)));
 		pattern = pattern_cons(arg_pattern, pattern);
@@ -1488,6 +1493,7 @@ namespace jest {namespace native {
 		void operator()(string const& operator_name, signature* fn) const
 		{
 			using namespace primitives;
+			using namespace pattern_primitives;
 			using namespace environment;
 
 			typedef shared_ptr<typed_value const> erased_signature(
@@ -1501,10 +1507,21 @@ namespace jest {namespace native {
 							builtin_symbol(operator_name)));
 
 			// Generate a rule to invoke the native form.
-			shared_ptr<values::pattern const> pattern;
-			shared_ptr<values::typed_cell const> expression;
+			shared_ptr<values::pattern const> pattern = pattern_nil();
+			shared_ptr<values::typed_cell const> expression = nil();
 			process_arg<X0>(pattern, expression, builtin_symbol("_0"));
 
+			// Add 'native' and the function to call to the front of the 
+			// expression.
+			expression = cons(
+					special_symbols::native,
+					cons(
+						make_shared<typed_value>(
+							shared_ptr<void>(),
+							caller_fn),
+						expression));
+
+			// Replace the old operator by rebinding a new one over the top.
 			shared_ptr<values::operator_ const> new_operator =
 				make_shared<values::operator_>(
 						make_shared<values::rule>(
@@ -1615,7 +1632,7 @@ namespace jest {namespace evaluation {
 					match_result->bindings[i];
 
 				scope = make_shared<values::binding>(
-						symbol(binding->symbol),
+						binding->symbol,
 						make_shared<typed_value>(
 							binding->type, binding->value), scope);
 			}
@@ -1642,15 +1659,25 @@ namespace jest {namespace evaluation {
 			return shared_ptr<typed_value const>();
 		}
 
+		// Expressions of the form (native <fn> ...) should interpret <fn> as 
+		// a function object to be passed the rest of the arguments.
 		shared_ptr<typed_cell const> cell =
 			static_pointer_cast<typed_cell const>(expression->value);
 		if (cell->head == special_symbols::native)
 		{
-			assert(0);
-			return shared_ptr<typed_value const>();
+			// Extract the boost::function object from the list.
+			typedef shared_ptr<typed_value const> erased_signature(
+					shared_ptr<typed_cell const> const& args);
+			shared_ptr<function<erased_signature> const> caller_fn =
+				static_pointer_cast<function<erased_signature> const>(
+						cadr(cell)->value);
+
+			// Call the native function via the function object.
+			return (*caller_fn)(evaluate_args(environment, cddr(cell)));
 		}
 		else if (cell->head == special_symbols::quote)
 		{
+			assert(cddr(cell) == nil());
 			return cadr(cell);
 		}
 
@@ -1677,17 +1704,20 @@ namespace jest {namespace evaluation {
 
 int main(int /*argc*/, char* /*argv*/[])
 {
-	using namespace jest::values;
-	using namespace jest::primitives;
-	using namespace jest::evaluation;
-	using namespace jest::environment;
+	using namespace jest;
+	using namespace values;
+	using namespace primitives;
+	using namespace evaluation;
+	using namespace environment;
 
 	jest::builtin::debugging::register_functions();
 	evaluate(
 			get_default_environment(),
 			value(list(
 				builtin_symbol("print"),
-				symbol("hello"))));
+				value(list(special_symbols::quote, symbol("hello"))))));
+	printf("\n");
+	fgetc(stdin);
 
 	try
 	{
@@ -1700,4 +1730,3 @@ int main(int /*argc*/, char* /*argv*/[])
 		return 1;
 	}
 }
-
