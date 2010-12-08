@@ -160,6 +160,17 @@ namespace jest {namespace values {
 	{
 		return types::get_type_object_dispatch(static_cast<T*>(0));
 	}
+
+	struct module
+	{
+	};
+
+	namespace types
+	{
+		shared_ptr<void const> const module(new int);
+		shared_ptr<void const> get_type_object_dispatch(values::module*)
+		{return module;}
+	}
 }}
 
 namespace jest {namespace pattern_primitives {
@@ -1439,6 +1450,10 @@ namespace jest {namespace native {
 	typedef function<shared_ptr<typed_value const>
 		(shared_ptr<typed_cell const> const& args)> native_function;
 
+	struct ellipsis
+	{
+	};
+
 	template <typename T> void process_arg(
 			shared_ptr<values::pattern const>& pattern,
 			shared_ptr<typed_cell const>& expression,
@@ -1465,6 +1480,31 @@ namespace jest {namespace native {
 		expression = cons(symbol, expression);
 	}
 
+	template <> void process_arg<ellipsis>(
+			shared_ptr<values::pattern const>& pattern,
+			shared_ptr<typed_cell const>& expression,
+			shared_ptr<typed_value const> const& symbol)
+	{
+		using namespace primitives;
+		using namespace pattern_primitives;
+
+		// Create the pattern for matching the remainder of the arguments.
+		shared_ptr<values::pattern const> arg_pattern =
+			make_shared<values::pattern>(pattern_types::variable,
+					make_shared<values::pattern>(
+						pattern_types::variable, symbol));
+
+		// This should replace the tail of the list, rather than being in the
+		// list (ie pattern list is improper).
+		pattern = arg_pattern;
+
+		// Create a reference to this argument in the expression.
+		expression = cons(symbol, expression);
+	}
+
+	template <typename T> struct argument_type_of {typedef T type;};
+	template <> struct argument_type_of<ellipsis> {typedef typed_cell type;};
+
 	template <typename S> struct registrar {};
 
 	template <typename X0> struct registrar<
@@ -1484,7 +1524,8 @@ namespace jest {namespace native {
 				using namespace primitives;
 
 				shared_ptr<typed_cell const> args_left = args;
-				shared_ptr<X0 const> x0 = downcast<X0>(pop(args_left));
+				typedef typename argument_type_of<X0>::type a0;
+				shared_ptr<a0 const> x0 = downcast<a0>(pop(args_left));
 				assert(args_left == nil());
 				return this->fn(x0);
 			}
@@ -1548,6 +1589,25 @@ namespace jest {namespace builtin {namespace debugging {
 	using namespace primitives;
 
 	shared_ptr<typed_value const> print_symbol(
+			shared_ptr<string const> const& symbol)
+	{
+		puts(symbol->c_str());
+		return value(nil());
+	}
+
+	void register_functions()
+	{
+		environment::push_operator(builtin_symbol("print"));
+		native::register_("print", print_symbol);
+	}
+}}}
+
+namespace jest {namespace builtin {namespace modules {
+	using namespace boost;
+	using namespace values;
+	using namespace primitives;
+
+	shared_ptr<typed_value const> evaluate_module(
 			shared_ptr<string const> const& symbol)
 	{
 		puts(symbol->c_str());
