@@ -15,6 +15,7 @@
 #include <boost/mpl/next_prior.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/make_shared.hpp>
+#include <boost/tuple/tuple.hpp>
 
 namespace jest {
 	class fatal_error {};
@@ -1533,13 +1534,14 @@ namespace jest {namespace native {
 	{typedef X type;};
 
 	template <typename X0> struct registrar<
-		shared_ptr<typed_value const>(*)(
+		tuple<shared_ptr<typed_value const>, shared_ptr<binding const> >(*)(
 				shared_ptr<binding const> const& environment,
 				X0 const&)>
 	{
 		typedef typename referee_type_of<X0>::type referee_type;
 
-		typedef shared_ptr<typed_value const> signature(
+		typedef tuple<shared_ptr<typed_value const>,
+				shared_ptr<binding const> > signature(
 				shared_ptr<binding const> const& environment,
 				X0 const&);
 
@@ -1548,7 +1550,8 @@ namespace jest {namespace native {
 			caller(signature* fn): fn(fn) {}
 			signature* fn;
 
-			shared_ptr<typed_value const> operator()(
+			tuple<shared_ptr<typed_value const>,
+					shared_ptr<binding const> > operator()(
 					shared_ptr<binding const> const& environment,
 					shared_ptr<typed_cell const> const& args) const
 			{
@@ -1569,7 +1572,8 @@ namespace jest {namespace native {
 			using namespace pattern_primitives;
 			using namespace environment;
 
-			typedef shared_ptr<typed_value const> erased_signature(
+			typedef tuple<shared_ptr<typed_value const>,
+					shared_ptr<binding const> > erased_signature(
 					shared_ptr<binding const> const& environment,
 					shared_ptr<typed_cell const> const& args);
 
@@ -1648,11 +1652,12 @@ namespace jest {namespace evaluation {
 		return match->value;
 	}
 
-	shared_ptr<typed_value const> evaluate(
+	tuple<shared_ptr<typed_value const>, shared_ptr<binding const> > evaluate(
 			shared_ptr<binding const> const& environment,
 			shared_ptr<typed_value const> const& expression);
 
-	shared_ptr<typed_cell const> evaluate_args(
+	tuple<shared_ptr<typed_cell const>, shared_ptr<binding const> >
+		evaluate_args(
 			shared_ptr<binding const> const& environment,
 			shared_ptr<typed_cell const> const& args)
 	{
@@ -1660,11 +1665,21 @@ namespace jest {namespace evaluation {
 
 		if (!args)
 			return nil();
-		return cons(evaluate(environment, args->head),
-				evaluate_args(environment, args->tail));
+
+		shared_ptr<typed_value const> head_result;
+		shared_ptr<binding const> head_bindings;
+		tie(head_result, head_bindings) = evaluate(environment, args->head);
+
+		shared_ptr<typed_cell const> tail_result;
+		shared_ptr<binding const> tail_bindings;
+
+		tie(tail_result, tail_bindings) = evaluate_args(head_bindings, args->tail);
+
+		return make_tuple(cons(head_result, tail_result), tail_bindings);
 	}
 
-	shared_ptr<typed_value const> apply_rules(
+	tuple<shared_ptr<typed_value const>, shared_ptr<binding const> >
+		apply_rules(
 			scoping_policy scoping,
 			shared_ptr<binding const> const& environment,
 			shared_ptr<rule const> const& rules,
@@ -1706,22 +1721,25 @@ namespace jest {namespace evaluation {
 		}
 
 		assert(0);
-		return shared_ptr<typed_value const>();
+		return make_tuple(shared_ptr<typed_value const>(),
+				shared_ptr<binding const>());
 	}
 
-	shared_ptr<typed_value const> evaluate(
+	tuple<shared_ptr<typed_value const>, shared_ptr<binding const> > evaluate(
 			shared_ptr<binding const> const& environment,
 			shared_ptr<typed_value const> const& expression)
 	{
 		using namespace primitives;
 
 		if (expression->type == types::symbol)
-			return lookup_binding(expression, environment);
+			return make_tuple(
+					lookup_binding(expression, environment), environment);
 
 		if (expression->type != types::typed_cell)
 		{
 			fatal("Unable to evaluate expression.");
-			return shared_ptr<typed_value const>();
+			return make_tuple(shared_ptr<typed_value const>(),
+					shared_ptr<binding const>());
 		}
 
 		// Expressions of the form (native <fn> ...) should interpret <fn> as 
@@ -1731,7 +1749,8 @@ namespace jest {namespace evaluation {
 		if (cell->head == special_symbols::native)
 		{
 			// Extract the boost::function object from the list.
-			typedef shared_ptr<typed_value const> erased_signature(
+			typedef tuple<shared_ptr<typed_value const>,
+					shared_ptr<binding const> > erased_signature(
 					shared_ptr<binding const> const& environment,
 					shared_ptr<typed_cell const> const& args);
 			shared_ptr<function<erased_signature> const> caller_fn =
@@ -1739,8 +1758,11 @@ namespace jest {namespace evaluation {
 						cadr(cell)->value);
 
 			// Call the native function via the function object.
-			return (*caller_fn)(environment,
-					evaluate_args(environment, cddr(cell)));
+			shared_ptr<typed_cell const> evaluated_args;
+			shared_ptr<binding const> evaluated_bindings;
+			tie(evaluated_args, evaluated_bindings) =
+				evaluate_args(environment, cddr(cell));
+			return (*caller_fn)(environment, evaluated_args);
 		}
 		else if (cell->head == special_symbols::quote)
 		{
@@ -1748,7 +1770,9 @@ namespace jest {namespace evaluation {
 			return cadr(cell);
 		}
 
-		shared_ptr<typed_value const> operator_val =
+		shared_ptr<typed_value const> operator_val;
+		shared_ptr<binding const> operator_bindings;
+	   	tie(operator_val, operator_bindings) =
 				evaluate(environment, cell->head);
 
 		if (operator_val->type == types::operator_)
@@ -1759,6 +1783,7 @@ namespace jest {namespace evaluation {
 
 			// Evaluate the args, unless the operator is a macro.
 			shared_ptr<typed_cell const> evaluated_args;
+			shared_ptr<binding const> args_bindings;
 			switch (operator_->evaluation_policy)
 			{
 				case evaluation_policy_no_evaluate:
@@ -1766,7 +1791,7 @@ namespace jest {namespace evaluation {
 					break;
 
 				case evaluation_policy_evaluate:
-					evaluated_args = evaluate_args(
+					tie(evaluated_args, args_bindings) = evaluate_args(
 						environment, cell->tail);
 					break;
 			}
@@ -1787,7 +1812,7 @@ namespace jest {namespace builtin {namespace debugging {
 	using namespace values;
 	using namespace primitives;
 
-	shared_ptr<typed_value const> print_symbol(
+	tuple<shared_ptr<typed_value const>, shared_ptr<binding const> > print_symbol(
 			shared_ptr<binding const> const& environment,
 			shared_ptr<string const> const& symbol)
 	{
@@ -1795,7 +1820,7 @@ namespace jest {namespace builtin {namespace debugging {
 		return value(nil());
 	}
 
-	shared_ptr<typed_value const> print_list(
+	tuple<shared_ptr<typed_value const>, shared_ptr<binding const> > print_list(
 			shared_ptr<binding const> const& environment,
 			shared_ptr<typed_cell const> const& ls)
 	{
@@ -1833,19 +1858,21 @@ namespace jest {namespace builtin {namespace modules {
 	using namespace values;
 	using namespace primitives;
 
-	shared_ptr<typed_value const> evaluate_module(
+	tuple<shared_ptr<typed_value const>, shared_ptr<binding const> >
+		evaluate_module(
 			shared_ptr<binding const> const& environment,
 			native::ellipsis const& rest)
 	{
-		return value(make_shared<module const>());
+		return make_tuple(value(make_shared<module const>()), environment);
 	}
 
-	shared_ptr<typed_value const> print_module(
+	tuple<shared_ptr<typed_value const>, shared_ptr<binding const> >
+		print_module(
 			shared_ptr<binding const> const& environment,
 			shared_ptr<module const> const& ls)
 	{
 		fputs("module<>", stdout);
-		return value(make_shared<module const>());
+		return make_tuple(value(make_shared<module const>()), environment);
 	}
 
 	void register_functions()
