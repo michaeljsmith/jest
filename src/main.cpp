@@ -143,12 +143,23 @@ namespace jest {namespace values {
 		scoping_policy_static
 	};
 
+	enum evaluation_policy
+	{
+		evaluation_policy_no_evaluate,
+		evaluation_policy_evaluate
+	};
+
 	struct operator_
 	{
 		operator_(values::scoping_policy scoping_policy,
+				values::evaluation_policy evaluation_policy,
 				shared_ptr<rule const> const& rules):
-		scoping_policy(scoping_policy), rules(rules) {}
+		scoping_policy(scoping_policy),
+		evaluation_policy(evaluation_policy),
+		rules(rules) {}
+
 		values::scoping_policy scoping_policy;
+		values::evaluation_policy evaluation_policy;
 		shared_ptr<rule const> rules;
 	};
 
@@ -159,19 +170,9 @@ namespace jest {namespace values {
 		{return operator_;}
 	}
 
-	shared_ptr<typed_value const> value(
-			shared_ptr<operator_ const> const& cell)
-	{
-		return make_shared<typed_value const>(types::operator_, cell);
-	}
-
-	template <typename T> shared_ptr<void const> get_type_object()
-	{
-		return types::get_type_object_dispatch(static_cast<T*>(0));
-	}
-
 	struct module
 	{
+		module() {}
 	};
 
 	namespace types
@@ -179,6 +180,17 @@ namespace jest {namespace values {
 		shared_ptr<void const> const module(new int);
 		shared_ptr<void const> get_type_object_dispatch(values::module*)
 		{return module;}
+	}
+
+	template <typename T> shared_ptr<void const> get_type_object()
+	{
+		return types::get_type_object_dispatch(static_cast<T*>(0));
+	}
+
+	template <typename T> shared_ptr<typed_value const> value(
+			shared_ptr<T const> const& cell)
+	{
+		return make_shared<typed_value const>(get_type_object<T>(), cell);
 	}
 }}
 
@@ -237,12 +249,6 @@ namespace jest {namespace primitives {
 		return *symbols.insert(make_shared<typed_value>(
 						types::symbol,
 						make_shared<string>(text))).first;
-	}
-
-	shared_ptr<typed_value const> value(
-			shared_ptr<typed_cell const> const& cell)
-	{
-		return make_shared<typed_value const>(types::typed_cell, cell);
 	}
 
 	shared_ptr<typed_cell const> cons(
@@ -1443,10 +1449,11 @@ namespace jest {namespace environment {
 	}
 
 	void push_operator(shared_ptr<typed_value const> const& identifier,
-			scoping_policy scoping)
+			scoping_policy scoping, evaluation_policy evaluation)
 	{
 		shared_ptr<values::operator_ const> new_operator =
-			make_shared<values::operator_>(scoping, shared_ptr<rule const>());
+			make_shared<values::operator_>(scoping, evaluation,
+					shared_ptr<rule const>());
 		push_default_binding(identifier, value(new_operator));
 	}
 
@@ -1464,6 +1471,8 @@ namespace jest {namespace native {
 
 	struct ellipsis
 	{
+		ellipsis(shared_ptr<typed_cell const> const& args): args(args) {}
+		shared_ptr<typed_cell const> args;
 	};
 
 	template <typename T> void process_arg(
@@ -1502,9 +1511,7 @@ namespace jest {namespace native {
 
 		// Create the pattern for matching the remainder of the arguments.
 		shared_ptr<values::pattern const> arg_pattern =
-			make_shared<values::pattern>(pattern_types::variable,
-					make_shared<values::pattern>(
-						pattern_types::variable, symbol));
+			make_shared<values::pattern>(pattern_types::variable, symbol);
 
 		// This should replace the tail of the list, rather than being in the
 		// list (ie pattern list is improper).
@@ -1519,14 +1526,20 @@ namespace jest {namespace native {
 
 	template <typename S> struct registrar {};
 
+	template <typename T> struct referee_type_of {typedef T type;};
+	template <typename X> struct referee_type_of<shared_ptr<X const> >
+	{typedef X type;};
+
 	template <typename X0> struct registrar<
 		shared_ptr<typed_value const>(*)(
 				shared_ptr<binding const> const& environment,
-				shared_ptr<X0 const> const&)>
+				X0 const&)>
 	{
+		typedef typename referee_type_of<X0>::type referee_type;
+
 		typedef shared_ptr<typed_value const> signature(
 				shared_ptr<binding const> const& environment,
-				shared_ptr<X0 const> const&);
+				X0 const&);
 
 		struct caller
 		{
@@ -1540,14 +1553,15 @@ namespace jest {namespace native {
 				using namespace primitives;
 
 				shared_ptr<typed_cell const> args_left = args;
-				typedef typename argument_type_of<X0>::type a0;
+				typedef typename argument_type_of<referee_type>::type a0;
 				shared_ptr<a0 const> x0 = downcast<a0>(pop(args_left));
 				assert(args_left == nil());
 				return this->fn(environment, x0);
 			}
 		};
 
-		void operator()(string const& operator_name, signature* fn) const
+		void operator()(shared_ptr<typed_value const> const& symbol,
+			signature* fn) const
 		{
 			using namespace primitives;
 			using namespace pattern_primitives;
@@ -1562,12 +1576,12 @@ namespace jest {namespace native {
 
 			shared_ptr<values::operator_ const> old_operator =
 				downcast<operator_>(lookup_default_binding(
-							builtin_symbol(operator_name)));
+							symbol));
 
 			// Generate a rule to invoke the native form.
 			shared_ptr<values::pattern const> pattern = pattern_nil();
 			shared_ptr<values::typed_cell const> expression = nil();
-			process_arg<X0>(pattern, expression, builtin_symbol("_0"));
+			process_arg<referee_type>(pattern, expression, builtin_symbol("_0"));
 
 			// Add 'native' and the function to call to the front of the 
 			// expression.
@@ -1583,88 +1597,23 @@ namespace jest {namespace native {
 			shared_ptr<values::operator_ const> new_operator =
 				make_shared<values::operator_>(
 						old_operator->scoping_policy,
+						old_operator->evaluation_policy,
 						make_shared<values::rule>(
 							pattern,
 							value(expression),
 							shared_ptr<binding const>(),
 							old_operator->rules));
 
-			push_default_binding(builtin_symbol(operator_name),
-					value(new_operator));
+			push_default_binding(symbol, value(new_operator));
 		}
 	};
 
 	template <typename F> void register_(
-			string const& operator_name, F fn)
+			shared_ptr<typed_value const> const& symbol, F fn)
 	{
-		registrar<F>()(operator_name, fn);
+		registrar<F>()(symbol, fn);
 	}
 }}
-
-namespace jest {namespace builtin {namespace debugging {
-	using namespace boost;
-	using namespace values;
-	using namespace primitives;
-
-	shared_ptr<typed_value const> print_symbol(
-			shared_ptr<binding const> const& environment,
-			shared_ptr<string const> const& symbol)
-	{
-		fputs(symbol->c_str(), stdout);
-		return value(nil());
-	}
-
-	shared_ptr<typed_value const> print_list(
-			shared_ptr<binding const> const& environment,
-			shared_ptr<typed_cell const> const& ls)
-	{
-		fputs("(", stdout);
-
-		for (shared_ptr<typed_cell const> tail = ls; tail;
-				tail = tail->tail)
-		{
-			evaluation::evaluate(environment,
-					value(list(
-							builtin_symbol("print"),
-							value(list(special_symbols::quote,
-									tail->head)))));
-
-			if (tail->tail)
-				fputs(" ", stdout);
-		}
-
-		fputs(")", stdout);
-
-		return value(nil());
-	}
-
-	void register_functions()
-	{
-		environment::push_operator(builtin_symbol("print"),
-				scoping_policy_dynamic);
-		native::register_("print", print_symbol);
-		native::register_("print", print_list);
-	}
-}}}
-
-namespace jest {namespace builtin {namespace modules {
-	using namespace boost;
-	using namespace values;
-	using namespace primitives;
-
-	shared_ptr<typed_value const> evaluate_module(
-			shared_ptr<string const> const& symbol)
-	{
-		puts(symbol->c_str());
-		return value(nil());
-	}
-
-	void register_functions()
-	{
-		environment::push_operator(builtin_symbol("print"));
-		native::register_("print", print_symbol);
-	}
-}}}
 
 namespace jest {namespace evaluation {
 	using namespace values;
@@ -1805,8 +1754,20 @@ namespace jest {namespace evaluation {
 			shared_ptr<values::operator_ const> operator_ =
 				static_pointer_cast<values::operator_ const>(
 						operator_val->value);
-			shared_ptr<typed_cell const> evaluated_args = evaluate_args(
-					environment, cell->tail);
+
+			// Evaluate the args, unless the operator is a macro.
+			shared_ptr<typed_cell const> evaluated_args;
+			switch (operator_->evaluation_policy)
+			{
+				case evaluation_policy_no_evaluate:
+					evaluated_args = cell->tail;
+					break;
+
+				case evaluation_policy_evaluate:
+					evaluated_args = evaluate_args(
+						environment, cell->tail);
+					break;
+			}
 
 			return apply_rules(operator_->scoping_policy,
 					environment, operator_->rules, evaluated_args);
@@ -1818,6 +1779,81 @@ namespace jest {namespace evaluation {
 		}
 	}
 }}
+
+namespace jest {namespace builtin {namespace debugging {
+	using namespace boost;
+	using namespace values;
+	using namespace primitives;
+
+	shared_ptr<typed_value const> print_symbol(
+			shared_ptr<binding const> const& environment,
+			shared_ptr<string const> const& symbol)
+	{
+		fputs(symbol->c_str(), stdout);
+		return value(nil());
+	}
+
+	shared_ptr<typed_value const> print_list(
+			shared_ptr<binding const> const& environment,
+			shared_ptr<typed_cell const> const& ls)
+	{
+		fputs("(", stdout);
+
+		for (shared_ptr<typed_cell const> tail = ls; tail;
+				tail = tail->tail)
+		{
+			evaluation::evaluate(environment,
+					value(list(
+							builtin_symbol("print"),
+							value(list(special_symbols::quote,
+									tail->head)))));
+
+			if (tail->tail)
+				fputs(" ", stdout);
+		}
+
+		fputs(")", stdout);
+
+		return value(nil());
+	}
+
+	void register_functions()
+	{
+		environment::push_operator(builtin_symbol("print"),
+				scoping_policy_dynamic, evaluation_policy_evaluate);
+		native::register_(builtin_symbol("print"), print_symbol);
+		native::register_(builtin_symbol("print"), print_list);
+	}
+}}}
+
+namespace jest {namespace builtin {namespace modules {
+	using namespace boost;
+	using namespace values;
+	using namespace primitives;
+
+	shared_ptr<typed_value const> evaluate_module(
+			shared_ptr<binding const> const& environment,
+			native::ellipsis const& rest)
+	{
+		return value(make_shared<module const>());
+	}
+
+	shared_ptr<typed_value const> print_module(
+			shared_ptr<binding const> const& environment,
+			shared_ptr<module const> const& ls)
+	{
+		fputs("module<>", stdout);
+		return value(make_shared<module const>());
+	}
+
+	void register_functions()
+	{
+		environment::push_operator(special_symbols::module,
+				scoping_policy_dynamic, evaluation_policy_no_evaluate);
+		native::register_(special_symbols::module, evaluate_module);
+		native::register_(builtin_symbol("print"), print_module);
+	}
+}}}
 
 int main(int /*argc*/, char* /*argv*/[])
 {
@@ -1837,13 +1873,13 @@ int main(int /*argc*/, char* /*argv*/[])
 			generation::generate_module(module_ast);
 
 		builtin::debugging::register_functions();
+		builtin::modules::register_functions();
 
-		evaluate(
-				get_default_environment(),
+		evaluate(get_default_environment(),
 				value(list(
 						builtin_symbol("print"),
-						value(list(special_symbols::quote,
-								module_expression)))));
+						module_expression)));
+
 		printf("\n");
 	}
 	catch (fatal_error /*e*/)
