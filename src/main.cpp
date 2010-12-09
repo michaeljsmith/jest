@@ -388,11 +388,13 @@ namespace jest {namespace special_symbols {
 	}
 
 	shared_ptr<typed_value const> const quote = detail::symbol("quote");
-	shared_ptr<typed_value const> const bind = detail::symbol("bind");
+	shared_ptr<typed_value const> const var = detail::symbol("var");
 	shared_ptr<typed_value const> const rule = detail::symbol("rule");
 	shared_ptr<typed_value const> const module = detail::symbol("module");
 	shared_ptr<typed_value const> const pattern = detail::symbol("pattern");
 	shared_ptr<typed_value const> const native = detail::symbol("native");
+	shared_ptr<typed_value const> const template_ = detail::symbol("template");
+	shared_ptr<typed_value const> const members = detail::symbol("members");
 }}
 
 namespace jest {namespace patterns {
@@ -1365,7 +1367,7 @@ namespace jest {namespace generation {
 			using namespace primitives;
 
 			return value(list(
-					special_symbols::bind,
+					special_symbols::var,
 					symbol(*target_symbol),
 					generate_expression(this->expression)));
 		}
@@ -1875,16 +1877,21 @@ int main(int /*argc*/, char* /*argv*/[])
 		builtin::debugging::register_functions();
 		builtin::modules::register_functions();
 
+		//evaluate(get_default_environment(),
+		//		value(list(
+		//				builtin_symbol("print"),
+		//				module_expression)));
 		evaluate(get_default_environment(),
 				value(list(
 						builtin_symbol("print"),
-						module_expression)));
+						value(list(special_symbols::quote,
+								module_expression)))));
 
 		printf("\n");
 	}
 	catch (fatal_error /*e*/)
 	{
-		fprintf(stderr, "Unrecoverable error; exitting.\n");
+		fprintf(stderr, "Unrecoverable error; exiting.\n");
 		return 1;
 	}
 }
