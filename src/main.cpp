@@ -122,6 +122,13 @@ namespace jest {namespace values {
 		shared_ptr<binding const> tail;
 	};
 
+	namespace types
+	{
+		shared_ptr<void const> const binding(new int);
+		shared_ptr<void const> get_type_object_dispatch(values::binding*)
+		{return binding;}
+	}
+
 	struct rule
 	{
 		rule(
@@ -384,6 +391,7 @@ namespace jest {namespace special_symbols {
 	shared_ptr<typed_value const> const native = detail::symbol("native");
 	shared_ptr<typed_value const> const template_ = detail::symbol("template");
 	shared_ptr<typed_value const> const members = detail::symbol("members");
+	shared_ptr<typed_value const> const self = detail::symbol("self");
 }}
 
 namespace jest {namespace patterns {
@@ -1404,10 +1412,207 @@ namespace jest {namespace generation {
 	}
 }}
 
+namespace jest {namespace evaluation {
+	using namespace values;
+
+	void fatal(char const* format, ...)
+	{
+		va_list args;
+		va_start(args, format);
+		vfprintf(stderr, format, args);
+		fputs("\n", stderr);
+		throw fatal_error();
+	}
+
+	shared_ptr<typed_value const> lookup_binding(
+			shared_ptr<typed_value const> const& symbol,
+			shared_ptr<binding const> const& env)
+	{
+		shared_ptr<values::binding const> match;
+		for (shared_ptr<values::binding const> binding = env;
+				binding; binding = binding->tail)
+		{
+			if (binding->identifier == symbol)
+			{
+				match = binding;
+				break;
+			}
+			else if (!binding->identifier)
+			{
+				// This is a special case - consider the value of the binding
+				// to be a sub-list of bindings.
+				assert(binding->value->type == types::binding);
+				shared_ptr<typed_value const> subresult = lookup_binding(
+						symbol, static_pointer_cast<values::binding const>(
+							binding->value->value));
+				if (subresult)
+					return subresult;
+			}
+		}
+
+		return (match ? match->value : shared_ptr<typed_value const>());
+	}
+
+	tuple<shared_ptr<typed_value const>, shared_ptr<binding const> > evaluate(
+			shared_ptr<binding const> const& environment,
+			shared_ptr<typed_value const> const& expression);
+
+	tuple<shared_ptr<typed_cell const>, shared_ptr<binding const> >
+		evaluate_args(
+			shared_ptr<binding const> const& environment,
+			shared_ptr<typed_cell const> const& args)
+	{
+		using namespace primitives;
+
+		if (!args)
+			return nil();
+
+		shared_ptr<typed_value const> head_result;
+		shared_ptr<binding const> head_bindings;
+		tie(head_result, head_bindings) = evaluate(environment, args->head);
+
+		shared_ptr<typed_cell const> tail_result;
+		shared_ptr<binding const> tail_bindings;
+
+		tie(tail_result, tail_bindings) = evaluate_args(head_bindings, args->tail);
+
+		return make_tuple(cons(head_result, tail_result), tail_bindings);
+	}
+
+	tuple<shared_ptr<typed_value const>, shared_ptr<binding const> >
+		apply_rules(
+			scoping_policy scoping,
+			shared_ptr<binding const> const& environment,
+			shared_ptr<rule const> const& rules,
+			shared_ptr<typed_cell const> const& args)
+	{
+		using namespace primitives;
+
+		for (shared_ptr<rule const> rule = rules; rule; rule = rule->tail)
+		{
+			patterns::context c;
+			shared_ptr<patterns::match_result const> match_result = match(
+					&c, rule->pattern->type, rule->pattern->value,
+					types::typed_cell, args);
+
+			if (!match_result)
+				continue;
+
+			// Determine what bindings to pass, based on the scoping policy of 
+			// the operator.
+			shared_ptr<binding const> scope;
+			switch (scoping)
+			{
+				case scoping_policy_dynamic: scope = environment; break;
+				case scoping_policy_static: scope = rule->scope; break;
+			}
+			for (int i = 0, cnt = int(match_result->bindings.size());
+					i < cnt; ++i)
+			{
+				shared_ptr<patterns::binding const> binding =
+					match_result->bindings[i];
+
+				scope = make_shared<values::binding>(
+						binding->symbol,
+						make_shared<typed_value>(
+							binding->type, binding->value), scope);
+			}
+
+			return evaluate(scope, rule->expression);
+		}
+
+		assert(0);
+		return make_tuple(shared_ptr<typed_value const>(),
+				shared_ptr<binding const>());
+	}
+
+	tuple<shared_ptr<typed_value const>, shared_ptr<binding const> > evaluate(
+			shared_ptr<binding const> const& environment,
+			shared_ptr<typed_value const> const& expression)
+	{
+		using namespace primitives;
+
+		if (expression->type == types::symbol)
+			return make_tuple(
+					lookup_binding(expression, environment), environment);
+
+		if (expression->type != types::typed_cell)
+		{
+			fatal("Unable to evaluate expression.");
+			return make_tuple(shared_ptr<typed_value const>(),
+					shared_ptr<binding const>());
+		}
+
+		// Expressions of the form (native <fn> ...) should interpret <fn> as 
+		// a function object to be passed the rest of the arguments.
+		shared_ptr<typed_cell const> cell =
+			static_pointer_cast<typed_cell const>(expression->value);
+		if (cell->head == special_symbols::native)
+		{
+			// Extract the boost::function object from the list.
+			typedef tuple<shared_ptr<typed_value const>,
+					shared_ptr<binding const> > erased_signature(
+					shared_ptr<binding const> const& environment,
+					shared_ptr<typed_cell const> const& args);
+			shared_ptr<function<erased_signature> const> caller_fn =
+				static_pointer_cast<function<erased_signature> const>(
+						cadr(cell)->value);
+
+			// Call the native function via the function object.
+			shared_ptr<typed_cell const> evaluated_args;
+			shared_ptr<binding const> evaluated_bindings;
+			tie(evaluated_args, evaluated_bindings) =
+				evaluate_args(environment, cddr(cell));
+			return (*caller_fn)(environment, evaluated_args);
+		}
+		else if (cell->head == special_symbols::quote)
+		{
+			assert(cddr(cell) == nil());
+			return cadr(cell);
+		}
+
+		shared_ptr<typed_value const> operator_val;
+		shared_ptr<binding const> operator_bindings;
+	   	tie(operator_val, operator_bindings) =
+				evaluate(environment, cell->head);
+
+		if (operator_val->type == types::operator_)
+		{
+			shared_ptr<values::operator_ const> operator_ =
+				static_pointer_cast<values::operator_ const>(
+						operator_val->value);
+
+			// Evaluate the args, unless the operator is a macro.
+			shared_ptr<typed_cell const> evaluated_args;
+			shared_ptr<binding const> args_bindings;
+			switch (operator_->evaluation_policy)
+			{
+				case evaluation_policy_no_evaluate:
+					evaluated_args = cell->tail;
+					break;
+
+				case evaluation_policy_evaluate:
+					tie(evaluated_args, args_bindings) = evaluate_args(
+						environment, cell->tail);
+					break;
+			}
+
+			return apply_rules(operator_->scoping_policy,
+					environment, operator_->rules, evaluated_args);
+		}
+		else
+		{
+			assert(0);
+			return shared_ptr<typed_value const>();
+		}
+	}
+}}
+
 namespace jest {namespace environment {
 	using namespace std;
 	using namespace boost;
 	using namespace values;
+	using namespace evaluation;
 
 	namespace detail
 	{
@@ -1417,19 +1622,7 @@ namespace jest {namespace environment {
 	shared_ptr<typed_value const> lookup_default_binding(
 			shared_ptr<typed_value const> const& symbol)
 	{
-		shared_ptr<values::binding const> match;
-		for (shared_ptr<values::binding const> binding = detail::default_env;
-				binding; binding = binding->tail)
-		{
-			if (binding->identifier == symbol)
-			{
-				match = binding;
-				break;
-			}
-		}
-
-		assert(match);
-		return match->value;
+		return lookup_binding(symbol, detail::default_env);
 	}
 
 	void push_default_binding(shared_ptr<typed_value const> const& symbol,
@@ -1609,192 +1802,6 @@ namespace jest {namespace native {
 	}
 }}
 
-namespace jest {namespace evaluation {
-	using namespace values;
-
-	void fatal(char const* format, ...)
-	{
-		va_list args;
-		va_start(args, format);
-		vfprintf(stderr, format, args);
-		fputs("\n", stderr);
-		throw fatal_error();
-	}
-
-	shared_ptr<typed_value const> lookup_binding(
-			shared_ptr<typed_value const> const& symbol,
-			shared_ptr<binding const> const& env)
-	{
-		shared_ptr<values::binding const> match;
-		for (shared_ptr<values::binding const> binding = env;
-				binding; binding = binding->tail)
-		{
-			if (binding->identifier == symbol)
-			{
-				match = binding;
-				break;
-			}
-		}
-
-		assert(match);
-		return match->value;
-	}
-
-	tuple<shared_ptr<typed_value const>, shared_ptr<binding const> > evaluate(
-			shared_ptr<binding const> const& environment,
-			shared_ptr<typed_value const> const& expression);
-
-	tuple<shared_ptr<typed_cell const>, shared_ptr<binding const> >
-		evaluate_args(
-			shared_ptr<binding const> const& environment,
-			shared_ptr<typed_cell const> const& args)
-	{
-		using namespace primitives;
-
-		if (!args)
-			return nil();
-
-		shared_ptr<typed_value const> head_result;
-		shared_ptr<binding const> head_bindings;
-		tie(head_result, head_bindings) = evaluate(environment, args->head);
-
-		shared_ptr<typed_cell const> tail_result;
-		shared_ptr<binding const> tail_bindings;
-
-		tie(tail_result, tail_bindings) = evaluate_args(head_bindings, args->tail);
-
-		return make_tuple(cons(head_result, tail_result), tail_bindings);
-	}
-
-	tuple<shared_ptr<typed_value const>, shared_ptr<binding const> >
-		apply_rules(
-			scoping_policy scoping,
-			shared_ptr<binding const> const& environment,
-			shared_ptr<rule const> const& rules,
-			shared_ptr<typed_cell const> const& args)
-	{
-		using namespace primitives;
-
-		for (shared_ptr<rule const> rule = rules; rule; rule = rule->tail)
-		{
-			patterns::context c;
-			shared_ptr<patterns::match_result const> match_result = match(
-					&c, rule->pattern->type, rule->pattern->value,
-					types::typed_cell, args);
-
-			if (!match_result)
-				continue;
-
-			// Determine what bindings to pass, based on the scoping policy of 
-			// the operator.
-			shared_ptr<binding const> scope;
-			switch (scoping)
-			{
-				case scoping_policy_dynamic: scope = environment; break;
-				case scoping_policy_static: scope = rule->scope; break;
-			}
-			for (int i = 0, cnt = int(match_result->bindings.size());
-					i < cnt; ++i)
-			{
-				shared_ptr<patterns::binding const> binding =
-					match_result->bindings[i];
-
-				scope = make_shared<values::binding>(
-						binding->symbol,
-						make_shared<typed_value>(
-							binding->type, binding->value), scope);
-			}
-
-			return evaluate(scope, rule->expression);
-		}
-
-		assert(0);
-		return make_tuple(shared_ptr<typed_value const>(),
-				shared_ptr<binding const>());
-	}
-
-	tuple<shared_ptr<typed_value const>, shared_ptr<binding const> > evaluate(
-			shared_ptr<binding const> const& environment,
-			shared_ptr<typed_value const> const& expression)
-	{
-		using namespace primitives;
-
-		if (expression->type == types::symbol)
-			return make_tuple(
-					lookup_binding(expression, environment), environment);
-
-		if (expression->type != types::typed_cell)
-		{
-			fatal("Unable to evaluate expression.");
-			return make_tuple(shared_ptr<typed_value const>(),
-					shared_ptr<binding const>());
-		}
-
-		// Expressions of the form (native <fn> ...) should interpret <fn> as 
-		// a function object to be passed the rest of the arguments.
-		shared_ptr<typed_cell const> cell =
-			static_pointer_cast<typed_cell const>(expression->value);
-		if (cell->head == special_symbols::native)
-		{
-			// Extract the boost::function object from the list.
-			typedef tuple<shared_ptr<typed_value const>,
-					shared_ptr<binding const> > erased_signature(
-					shared_ptr<binding const> const& environment,
-					shared_ptr<typed_cell const> const& args);
-			shared_ptr<function<erased_signature> const> caller_fn =
-				static_pointer_cast<function<erased_signature> const>(
-						cadr(cell)->value);
-
-			// Call the native function via the function object.
-			shared_ptr<typed_cell const> evaluated_args;
-			shared_ptr<binding const> evaluated_bindings;
-			tie(evaluated_args, evaluated_bindings) =
-				evaluate_args(environment, cddr(cell));
-			return (*caller_fn)(environment, evaluated_args);
-		}
-		else if (cell->head == special_symbols::quote)
-		{
-			assert(cddr(cell) == nil());
-			return cadr(cell);
-		}
-
-		shared_ptr<typed_value const> operator_val;
-		shared_ptr<binding const> operator_bindings;
-	   	tie(operator_val, operator_bindings) =
-				evaluate(environment, cell->head);
-
-		if (operator_val->type == types::operator_)
-		{
-			shared_ptr<values::operator_ const> operator_ =
-				static_pointer_cast<values::operator_ const>(
-						operator_val->value);
-
-			// Evaluate the args, unless the operator is a macro.
-			shared_ptr<typed_cell const> evaluated_args;
-			shared_ptr<binding const> args_bindings;
-			switch (operator_->evaluation_policy)
-			{
-				case evaluation_policy_no_evaluate:
-					evaluated_args = cell->tail;
-					break;
-
-				case evaluation_policy_evaluate:
-					tie(evaluated_args, args_bindings) = evaluate_args(
-						environment, cell->tail);
-					break;
-			}
-
-			return apply_rules(operator_->scoping_policy,
-					environment, operator_->rules, evaluated_args);
-		}
-		else
-		{
-			assert(0);
-			return shared_ptr<typed_value const>();
-		}
-	}
-}}
-
 namespace jest {namespace builtin {namespace debugging {
 	using namespace boost;
 	using namespace values;
@@ -1851,6 +1858,14 @@ namespace jest {namespace builtin {namespace modules {
 			shared_ptr<binding const> const& environment,
 			native::ellipsis const& rest)
 	{
+		// Create a new scope to pass to sub-expressions. Add a binding
+		// called 'self' to which all rules will add themselves.
+		shared_ptr<binding const> subscope = make_shared<values::binding>(
+				special_symbols::self,
+				value(nil()), environment);
+
+		// Evaluate each clause in the module.
+
 		return make_tuple(value(list(special_symbols::module)), environment);
 	}
 
@@ -1882,11 +1897,11 @@ int main(int /*argc*/, char* /*argv*/[])
 		builtin::debugging::register_functions();
 		builtin::modules::register_functions();
 
-		//evaluate(get_default_environment(),
-		//		value(list(
-		//				builtin_symbol("print"),
-		//				value(list(special_symbols::quote,
-		//						module_expression)))));
+		evaluate(get_default_environment(),
+				value(list(
+						builtin_symbol("print"),
+						value(list(special_symbols::quote,
+								module_expression)))));
 
 		shared_ptr<typed_value const> module = evaluate(
 				get_default_environment(),
