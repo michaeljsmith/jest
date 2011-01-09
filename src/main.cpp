@@ -125,10 +125,10 @@ namespace jest {namespace values {
 	struct rule
 	{
 		rule(
-				shared_ptr<values::pattern const> pattern,
-				shared_ptr<typed_value const> expression,
-				shared_ptr<binding const> scope,
-				shared_ptr<rule const> tail):
+				shared_ptr<values::pattern const> const& pattern,
+				shared_ptr<typed_value const> const& expression,
+				shared_ptr<binding const> const& scope,
+				shared_ptr<rule const> const& tail):
 			pattern(pattern), expression(expression),
 			scope(scope), tail(tail) {}
 
@@ -169,18 +169,6 @@ namespace jest {namespace values {
 		shared_ptr<void const> const operator_(new int);
 		shared_ptr<void const> get_type_object_dispatch(values::operator_*)
 		{return operator_;}
-	}
-
-	struct module
-	{
-		module() {}
-	};
-
-	namespace types
-	{
-		shared_ptr<void const> const module(new int);
-		shared_ptr<void const> get_type_object_dispatch(values::module*)
-		{return module;}
 	}
 
 	template <typename T> shared_ptr<void const> get_type_object()
@@ -1863,16 +1851,7 @@ namespace jest {namespace builtin {namespace modules {
 			shared_ptr<binding const> const& environment,
 			native::ellipsis const& rest)
 	{
-		return make_tuple(value(make_shared<module const>()), environment);
-	}
-
-	tuple<shared_ptr<typed_value const>, shared_ptr<binding const> >
-		print_module(
-			shared_ptr<binding const> const& environment,
-			shared_ptr<module const> const& ls)
-	{
-		fputs("module<>", stdout);
-		return make_tuple(value(make_shared<module const>()), environment);
+		return make_tuple(value(list(special_symbols::module)), environment);
 	}
 
 	void register_functions()
@@ -1880,7 +1859,6 @@ namespace jest {namespace builtin {namespace modules {
 		environment::push_operator(special_symbols::module,
 				scoping_policy_dynamic, evaluation_policy_no_evaluate);
 		native::register_(special_symbols::module, evaluate_module);
-		native::register_(builtin_symbol("print"), print_module);
 	}
 }}}
 
@@ -1907,12 +1885,18 @@ int main(int /*argc*/, char* /*argv*/[])
 		//evaluate(get_default_environment(),
 		//		value(list(
 		//				builtin_symbol("print"),
-		//				module_expression)));
+		//				value(list(special_symbols::quote,
+		//						module_expression)))));
+
+		shared_ptr<typed_value const> module = evaluate(
+				get_default_environment(),
+				module_expression).get<0>();
+
 		evaluate(get_default_environment(),
 				value(list(
 						builtin_symbol("print"),
 						value(list(special_symbols::quote,
-								module_expression)))));
+								module)))));
 
 		printf("\n");
 	}
