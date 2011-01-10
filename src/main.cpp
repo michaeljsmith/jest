@@ -17,6 +17,9 @@
 #include <boost/make_shared.hpp>
 #include <boost/tuple/tuple.hpp>
 
+// * Rejig bindings to include patterns.
+// * Rejig eval loop to handle patterns.
+
 namespace jest {
 	class fatal_error {};
 }
@@ -385,6 +388,7 @@ namespace jest {namespace special_symbols {
 
 	shared_ptr<typed_value const> const quote = detail::symbol("quote");
 	shared_ptr<typed_value const> const var = detail::symbol("var");
+	shared_ptr<typed_value const> const def = detail::symbol("def");
 	shared_ptr<typed_value const> const rule = detail::symbol("rule");
 	shared_ptr<typed_value const> const module = detail::symbol("module");
 	shared_ptr<typed_value const> const pattern = detail::symbol("pattern");
@@ -600,6 +604,13 @@ namespace jest {namespace patterns {
 			fatal(c, "INTERNAL ERROR: Invalid pattern type.");
 			return shared_ptr<match_result const>();
 		}
+	}
+
+	shared_ptr<pattern const> compile_pattern_expression(
+			shared_ptr<typed_value const>  const& pattern_expr)
+	{
+		assert(0);
+		return shared_ptr<pattern const>();
 	}
 }}
 
@@ -1852,19 +1863,87 @@ namespace jest {namespace builtin {namespace modules {
 	using namespace boost;
 	using namespace values;
 	using namespace primitives;
+	using namespace evaluation;
 
 	tuple<shared_ptr<typed_value const>, shared_ptr<binding const> >
 		evaluate_module(
-			shared_ptr<binding const> const& environment,
+			shared_ptr<binding const> const& in_environment,
 			native::ellipsis const& rest)
 	{
-		// Create a new scope to pass to sub-expressions. Add a binding
-		// called 'self' to which all rules will add themselves.
-		shared_ptr<binding const> subscope = make_shared<values::binding>(
-				special_symbols::self,
-				value(nil()), environment);
+		shared_ptr<binding const> environment = in_environment;
+
+		//// Create a new scope to pass to sub-expressions. Add a binding
+		//// called 'self' to which all rules will add themselves.
+		//shared_ptr<binding const> subscope = make_shared<values::binding>(
+		//		special_symbols::self,
+		//		value(nil()), environment);
 
 		// Evaluate each clause in the module.
+		for (shared_ptr<typed_cell const> arg = rest.args;
+				arg; arg = arg->tail)
+		{
+			shared_ptr<typed_value const> expr = arg->head;
+
+			// Check whether this expression is a rule.
+			if (expr->type == types::typed_cell &&
+					car(expr) == special_symbols::rule)
+			{
+				shared_ptr<typed_value const> operator_expr = cadr(expr);
+				shared_ptr<typed_value const> pattern_expr = cadr(expr);
+				shared_ptr<typed_value const> value_expr = cadr(expr);
+
+				// Check whether the operator is a symbol - if so, make an
+				// operator in this module, if one doesn't already exist.
+				shared_ptr<values::operator_ const> operator_;
+				if (operator_expr->type == types::symbol)
+				{
+					shared_ptr<string const> symbol =
+						static_pointer_cast<string const>(operator_expr->value);
+
+					shared_ptr<typed_value const> existing = lookup_binding(
+							value(symbol), environment);
+
+					if (existing)
+					{
+						// The operator is already defined, no need to make a
+						// new one. 
+						assert(existing->type == types::operator_);
+						operator_ = static_pointer_cast<values::operator_ const>(
+								existing->value);
+					}
+					else
+					{
+						// Previously undefined operator, define it now.
+						operator_ = make_shared<values::operator_>(
+								scoping_policy_static,
+								evaluation_policy_evaluate,
+								shared_ptr<rule const>());
+						environment = make_shared<binding>(
+								value(symbol), value(operator_), environment);
+					}
+				}
+
+				// Compile the pattern.
+				shared_ptr<values::pattern const> pattern =
+					patterns::compile_pattern_expression(pattern_expr);
+
+				// Rebind a new operator with this additional rule added.
+				shared_ptr<values::operator_ const> new_operator =
+					make_shared<values::operator_>(
+							operator_->scoping_policy,
+							operator_->evaluation_policy,
+							make_shared<values::rule>(
+								pattern,
+								pattern_expr,
+								environment,
+								operator_->rules));
+			}
+			else
+			{
+				// Module clause is not a rule, so simply evaluate it.
+				assert(0);
+			}
+		}
 
 		return make_tuple(value(list(special_symbols::module)), environment);
 	}
