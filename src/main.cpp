@@ -114,37 +114,19 @@ namespace jest {namespace values {
 		shared_ptr<void const> const value(new int);
 	}
 
-	struct binding
-	{
-		binding(shared_ptr<typed_value const> const& identifier,
-				shared_ptr<typed_value const> const& value,
-				shared_ptr<binding const> const& tail):
-			identifier(identifier), value(value), tail(tail)  {}
-		shared_ptr<typed_value const> identifier;
-		shared_ptr<typed_value const> value;
-		shared_ptr<binding const> tail;
-	};
-
-	namespace types
-	{
-		shared_ptr<void const> const binding(new int);
-		shared_ptr<void const> get_type_object_dispatch(values::binding*)
-		{return binding;}
-	}
-
 	struct rule
 	{
 		rule(
 				shared_ptr<values::pattern const> const& pattern,
 				shared_ptr<typed_value const> const& expression,
-				shared_ptr<binding const> const& scope,
+				shared_ptr<rule const> const& scope,
 				shared_ptr<rule const> const& tail):
 			pattern(pattern), expression(expression),
 			scope(scope), tail(tail) {}
 
 		shared_ptr<values::pattern const> pattern;
 		shared_ptr<typed_value const> expression;
-		shared_ptr<binding const> scope;
+		shared_ptr<rule const> scope;
 		shared_ptr<rule const> tail;
 	};
 
@@ -166,12 +148,10 @@ namespace jest {namespace values {
 				values::evaluation_policy evaluation_policy,
 				shared_ptr<rule const> const& rules):
 		scoping_policy(scoping_policy),
-		evaluation_policy(evaluation_policy),
-		rules(rules) {}
+		evaluation_policy(evaluation_policy) {}
 
 		values::scoping_policy scoping_policy;
 		values::evaluation_policy evaluation_policy;
-		shared_ptr<rule const> rules;
 	};
 
 	namespace types
@@ -1435,42 +1415,22 @@ namespace jest {namespace evaluation {
 		throw fatal_error();
 	}
 
-	shared_ptr<typed_value const> lookup_binding(
+	shared_ptr<rule const> create_binding_rule(
 			shared_ptr<typed_value const> const& symbol,
-			shared_ptr<binding const> const& env)
+			shared_ptr<typed_value const> const& value,
+			shared_ptr<rule const> const& existing_rules)
 	{
-		shared_ptr<values::binding const> match;
-		for (shared_ptr<values::binding const> binding = env;
-				binding; binding = binding->tail)
-		{
-			if (binding->identifier == symbol)
-			{
-				match = binding;
-				break;
-			}
-			else if (!binding->identifier)
-			{
-				// This is a special case - consider the value of the binding
-				// to be a sub-list of bindings.
-				assert(binding->value->type == types::binding);
-				shared_ptr<typed_value const> subresult = lookup_binding(
-						symbol, static_pointer_cast<values::binding const>(
-							binding->value->value));
-				if (subresult)
-					return subresult;
-			}
-		}
-
-		return (match ? match->value : shared_ptr<typed_value const>());
+		assert(0);
+		return shared_ptr<rule const>();
 	}
 
-	tuple<shared_ptr<typed_value const>, shared_ptr<binding const> > evaluate(
-			shared_ptr<binding const> const& environment,
+	tuple<shared_ptr<typed_value const>, shared_ptr<rule const> > evaluate(
+			shared_ptr<rule const> const& environment,
 			shared_ptr<typed_value const> const& expression);
 
-	tuple<shared_ptr<typed_cell const>, shared_ptr<binding const> >
+	tuple<shared_ptr<typed_cell const>, shared_ptr<rule const> >
 		evaluate_args(
-			shared_ptr<binding const> const& environment,
+			shared_ptr<rule const> const& environment,
 			shared_ptr<typed_cell const> const& args)
 	{
 		using namespace primitives;
@@ -1479,23 +1439,24 @@ namespace jest {namespace evaluation {
 			return nil();
 
 		shared_ptr<typed_value const> head_result;
-		shared_ptr<binding const> head_bindings;
+		shared_ptr<rule const> head_bindings;
 		tie(head_result, head_bindings) = evaluate(environment, args->head);
 
 		shared_ptr<typed_cell const> tail_result;
-		shared_ptr<binding const> tail_bindings;
+		shared_ptr<rule const> tail_bindings;
 
 		tie(tail_result, tail_bindings) = evaluate_args(head_bindings, args->tail);
 
 		return make_tuple(cons(head_result, tail_result), tail_bindings);
 	}
 
-	tuple<shared_ptr<typed_value const>, shared_ptr<binding const> >
+	tuple<shared_ptr<typed_value const>, shared_ptr<rule const> >
 		apply_rules(
 			scoping_policy scoping,
-			shared_ptr<binding const> const& environment,
+			shared_ptr<rule const> const& environment,
 			shared_ptr<rule const> const& rules,
-			shared_ptr<typed_cell const> const& args)
+			shared_ptr<void const> const& form_type,
+			shared_ptr<void const> const& form_value)
 	{
 		using namespace primitives;
 
@@ -1504,14 +1465,14 @@ namespace jest {namespace evaluation {
 			patterns::context c;
 			shared_ptr<patterns::match_result const> match_result = match(
 					&c, rule->pattern->type, rule->pattern->value,
-					types::typed_cell, args);
+					form_type, form_value);
 
 			if (!match_result)
 				continue;
 
 			// Determine what bindings to pass, based on the scoping policy of 
 			// the operator.
-			shared_ptr<binding const> scope;
+			shared_ptr<values::rule const> scope;
 			switch (scoping)
 			{
 				case scoping_policy_dynamic: scope = environment; break;
@@ -1523,10 +1484,9 @@ namespace jest {namespace evaluation {
 				shared_ptr<patterns::binding const> binding =
 					match_result->bindings[i];
 
-				scope = make_shared<values::binding>(
-						binding->symbol,
-						make_shared<typed_value>(
-							binding->type, binding->value), scope);
+				scope = create_binding_rule(binding->symbol,
+						make_shared<typed_value>(binding->type,
+							binding->value), scope);
 			}
 
 			return evaluate(scope, rule->expression);
@@ -1534,24 +1494,26 @@ namespace jest {namespace evaluation {
 
 		assert(0);
 		return make_tuple(shared_ptr<typed_value const>(),
-				shared_ptr<binding const>());
+				shared_ptr<values::rule const>());
 	}
 
-	tuple<shared_ptr<typed_value const>, shared_ptr<binding const> > evaluate(
-			shared_ptr<binding const> const& environment,
+	tuple<shared_ptr<typed_value const>, shared_ptr<rule const> > evaluate(
+			shared_ptr<rule const> const& environment,
 			shared_ptr<typed_value const> const& expression)
 	{
 		using namespace primitives;
 
 		if (expression->type == types::symbol)
-			return make_tuple(
-					lookup_binding(expression, environment), environment);
+		{
+			return apply_rules(scoping_policy_static, environment,
+					environment, expression->type, expression->value);
+		}
 
 		if (expression->type != types::typed_cell)
 		{
 			fatal("Unable to evaluate expression.");
 			return make_tuple(shared_ptr<typed_value const>(),
-					shared_ptr<binding const>());
+					shared_ptr<rule const>());
 		}
 
 		// Expressions of the form (native <fn> ...) should interpret <fn> as 
@@ -1562,8 +1524,8 @@ namespace jest {namespace evaluation {
 		{
 			// Extract the boost::function object from the list.
 			typedef tuple<shared_ptr<typed_value const>,
-					shared_ptr<binding const> > erased_signature(
-					shared_ptr<binding const> const& environment,
+					shared_ptr<rule const> > erased_signature(
+					shared_ptr<rule const> const& environment,
 					shared_ptr<typed_cell const> const& args);
 			shared_ptr<function<erased_signature> const> caller_fn =
 				static_pointer_cast<function<erased_signature> const>(
@@ -1571,7 +1533,7 @@ namespace jest {namespace evaluation {
 
 			// Call the native function via the function object.
 			shared_ptr<typed_cell const> evaluated_args;
-			shared_ptr<binding const> evaluated_bindings;
+			shared_ptr<rule const> evaluated_bindings;
 			tie(evaluated_args, evaluated_bindings) =
 				evaluate_args(environment, cddr(cell));
 			return (*caller_fn)(environment, evaluated_args);
@@ -1583,7 +1545,7 @@ namespace jest {namespace evaluation {
 		}
 
 		shared_ptr<typed_value const> operator_val;
-		shared_ptr<binding const> operator_bindings;
+		shared_ptr<rule const> operator_bindings;
 	   	tie(operator_val, operator_bindings) =
 				evaluate(environment, cell->head);
 
@@ -1595,7 +1557,7 @@ namespace jest {namespace evaluation {
 
 			// Evaluate the args, unless the operator is a macro.
 			shared_ptr<typed_cell const> evaluated_args;
-			shared_ptr<binding const> args_bindings;
+			shared_ptr<rule const> args_bindings;
 			switch (operator_->evaluation_policy)
 			{
 				case evaluation_policy_no_evaluate:
@@ -1609,7 +1571,8 @@ namespace jest {namespace evaluation {
 			}
 
 			return apply_rules(operator_->scoping_policy,
-					environment, operator_->rules, evaluated_args);
+					environment, environment, types::typed_cell,
+					evaluated_args);
 		}
 		else
 		{
@@ -1627,20 +1590,27 @@ namespace jest {namespace environment {
 
 	namespace detail
 	{
-		shared_ptr<binding const> default_env;
+		shared_ptr<rule const> default_env;
 	}
 
-	shared_ptr<typed_value const> lookup_default_binding(
-			shared_ptr<typed_value const> const& symbol)
+	shared_ptr<typed_value const> default_evaluate(
+			shared_ptr<typed_value const> const& expression)
 	{
-		return lookup_binding(symbol, detail::default_env);
+		assert(0);
+	}
+
+	void push_default_rule(shared_ptr<patterns::pattern const> const& pattern,
+			shared_ptr<typed_value const> const& expression,
+			shared_ptr<rule const> const& scope)
+	{
+		detail::default_env = make_shared<rule>(pattern, value(expression),
+				scope, detail::default_env);
 	}
 
 	void push_default_binding(shared_ptr<typed_value const> const& symbol,
 			shared_ptr<typed_value const> const& value)
 	{
-		detail::default_env = make_shared<binding>(
-				symbol, value, detail::default_env);
+		assert(0);
 	}
 
 	void push_operator(shared_ptr<typed_value const> const& identifier,
@@ -1652,7 +1622,7 @@ namespace jest {namespace environment {
 		push_default_binding(identifier, value(new_operator));
 	}
 
-	shared_ptr<binding const> get_default_environment()
+	shared_ptr<rule const> get_default_environment()
 	{return detail::default_env;}
 }}
 
@@ -1726,15 +1696,15 @@ namespace jest {namespace native {
 	{typedef X type;};
 
 	template <typename X0> struct registrar<
-		tuple<shared_ptr<typed_value const>, shared_ptr<binding const> >(*)(
-				shared_ptr<binding const> const& environment,
+		tuple<shared_ptr<typed_value const>, shared_ptr<rule const> >(*)(
+				shared_ptr<rule const> const& environment,
 				X0 const&)>
 	{
 		typedef typename referee_type_of<X0>::type referee_type;
 
 		typedef tuple<shared_ptr<typed_value const>,
-				shared_ptr<binding const> > signature(
-				shared_ptr<binding const> const& environment,
+				shared_ptr<rule const> > signature(
+				shared_ptr<rule const> const& environment,
 				X0 const&);
 
 		struct caller
@@ -1743,8 +1713,8 @@ namespace jest {namespace native {
 			signature* fn;
 
 			tuple<shared_ptr<typed_value const>,
-					shared_ptr<binding const> > operator()(
-					shared_ptr<binding const> const& environment,
+					shared_ptr<rule const> > operator()(
+					shared_ptr<rule const> const& environment,
 					shared_ptr<typed_cell const> const& args) const
 			{
 				using namespace primitives;
@@ -1765,21 +1735,24 @@ namespace jest {namespace native {
 			using namespace environment;
 
 			typedef tuple<shared_ptr<typed_value const>,
-					shared_ptr<binding const> > erased_signature(
-					shared_ptr<binding const> const& environment,
+					shared_ptr<rule const> > erased_signature(
+					shared_ptr<rule const> const& environment,
 					shared_ptr<typed_cell const> const& args);
 
 			shared_ptr<function<erased_signature> > caller_fn =
 				make_shared<function<erased_signature> >(caller(fn));
 
-			shared_ptr<values::operator_ const> old_operator =
-				downcast<operator_>(lookup_default_binding(
-							symbol));
+			shared_ptr<values::typed_value const> operator_value =
+				default_evaluate(value(symbol));
+			shared_ptr<values::operator_ const> operator_ =
+				downcast<values::operator_>(operator_value);
 
 			// Generate a rule to invoke the native form.
 			shared_ptr<values::pattern const> pattern = pattern_nil();
 			shared_ptr<values::typed_cell const> expression = nil();
 			process_arg<referee_type>(pattern, expression, builtin_symbol("_0"));
+			pattern = pattern_cons(make_shared<patterns::pattern>(
+						pattern_types::constant, operator_value), pattern);
 
 			// Add 'native' and the function to call to the front of the 
 			// expression.
@@ -1792,17 +1765,8 @@ namespace jest {namespace native {
 						expression));
 
 			// Replace the old operator by rebinding a new one over the top.
-			shared_ptr<values::operator_ const> new_operator =
-				make_shared<values::operator_>(
-						old_operator->scoping_policy,
-						old_operator->evaluation_policy,
-						make_shared<values::rule>(
-							pattern,
-							value(expression),
-							shared_ptr<binding const>(),
-							old_operator->rules));
-
-			push_default_binding(symbol, value(new_operator));
+			push_default_rule(pattern, value(expression),
+					shared_ptr<rule const>());
 		}
 	};
 
@@ -1818,16 +1782,16 @@ namespace jest {namespace builtin {namespace debugging {
 	using namespace values;
 	using namespace primitives;
 
-	tuple<shared_ptr<typed_value const>, shared_ptr<binding const> > print_symbol(
-			shared_ptr<binding const> const& environment,
+	tuple<shared_ptr<typed_value const>, shared_ptr<rule const> > print_symbol(
+			shared_ptr<rule const> const& environment,
 			shared_ptr<string const> const& symbol)
 	{
 		fputs(symbol->c_str(), stdout);
 		return value(nil());
 	}
 
-	tuple<shared_ptr<typed_value const>, shared_ptr<binding const> > print_list(
-			shared_ptr<binding const> const& environment,
+	tuple<shared_ptr<typed_value const>, shared_ptr<rule const> > print_list(
+			shared_ptr<rule const> const& environment,
 			shared_ptr<typed_cell const> const& ls)
 	{
 		fputs("(", stdout);
@@ -1865,18 +1829,12 @@ namespace jest {namespace builtin {namespace modules {
 	using namespace primitives;
 	using namespace evaluation;
 
-	tuple<shared_ptr<typed_value const>, shared_ptr<binding const> >
+	tuple<shared_ptr<typed_value const>, shared_ptr<rule const> >
 		evaluate_module(
-			shared_ptr<binding const> const& in_environment,
+			shared_ptr<rule const> const& in_environment,
 			native::ellipsis const& rest)
 	{
-		shared_ptr<binding const> environment = in_environment;
-
-		//// Create a new scope to pass to sub-expressions. Add a binding
-		//// called 'self' to which all rules will add themselves.
-		//shared_ptr<binding const> subscope = make_shared<values::binding>(
-		//		special_symbols::self,
-		//		value(nil()), environment);
+		shared_ptr<rule const> environment = in_environment;
 
 		// Evaluate each clause in the module.
 		for (shared_ptr<typed_cell const> arg = rest.args;
@@ -1884,65 +1842,7 @@ namespace jest {namespace builtin {namespace modules {
 		{
 			shared_ptr<typed_value const> expr = arg->head;
 
-			// Check whether this expression is a rule.
-			if (expr->type == types::typed_cell &&
-					car(expr) == special_symbols::rule)
-			{
-				shared_ptr<typed_value const> operator_expr = cadr(expr);
-				shared_ptr<typed_value const> pattern_expr = cadr(expr);
-				shared_ptr<typed_value const> value_expr = cadr(expr);
-
-				// Check whether the operator is a symbol - if so, make an
-				// operator in this module, if one doesn't already exist.
-				shared_ptr<values::operator_ const> operator_;
-				if (operator_expr->type == types::symbol)
-				{
-					shared_ptr<string const> symbol =
-						static_pointer_cast<string const>(operator_expr->value);
-
-					shared_ptr<typed_value const> existing = lookup_binding(
-							value(symbol), environment);
-
-					if (existing)
-					{
-						// The operator is already defined, no need to make a
-						// new one. 
-						assert(existing->type == types::operator_);
-						operator_ = static_pointer_cast<values::operator_ const>(
-								existing->value);
-					}
-					else
-					{
-						// Previously undefined operator, define it now.
-						operator_ = make_shared<values::operator_>(
-								scoping_policy_static,
-								evaluation_policy_evaluate,
-								shared_ptr<rule const>());
-						environment = make_shared<binding>(
-								value(symbol), value(operator_), environment);
-					}
-				}
-
-				// Compile the pattern.
-				shared_ptr<values::pattern const> pattern =
-					patterns::compile_pattern_expression(pattern_expr);
-
-				// Rebind a new operator with this additional rule added.
-				shared_ptr<values::operator_ const> new_operator =
-					make_shared<values::operator_>(
-							operator_->scoping_policy,
-							operator_->evaluation_policy,
-							make_shared<values::rule>(
-								pattern,
-								pattern_expr,
-								environment,
-								operator_->rules));
-			}
-			else
-			{
-				// Module clause is not a rule, so simply evaluate it.
-				assert(0);
-			}
+			assert(0);
 		}
 
 		return make_tuple(value(list(special_symbols::module)), environment);
