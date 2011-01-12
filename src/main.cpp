@@ -17,9 +17,6 @@
 #include <boost/make_shared.hpp>
 #include <boost/tuple/tuple.hpp>
 
-// * Rejig bindings to include patterns.
-// * Rejig eval loop to handle patterns.
-
 namespace jest {
 	class fatal_error {};
 }
@@ -40,17 +37,22 @@ namespace jest {namespace values {
 		{return symbol;}
 	}
 
+	namespace types
+	{
+		shared_ptr<void const> const typed_value(new int);
+	}
+
 	struct typed_value
 	{
 		typed_value(shared_ptr<void const> type,
-				shared_ptr<void const> value): type(type), value(value) {}
+				shared_ptr<void const> value): type(type), value(value)
+		{assert(type != types::typed_value);}
 		shared_ptr<void const> type;
 		shared_ptr<void const> value;
 	};
 
 	namespace types
 	{
-		shared_ptr<void const> const typed_value(new int);
 		shared_ptr<void const> get_type_object_dispatch(values::typed_value*)
 		{return typed_value;}
 	}
@@ -170,6 +172,13 @@ namespace jest {namespace values {
 			shared_ptr<T const> const& cell)
 	{
 		return make_shared<typed_value const>(get_type_object<T>(), cell);
+	}
+
+	shared_ptr<typed_value const> value(
+			shared_ptr<typed_value const> const& cell)
+	{
+		assert(0);
+		return shared_ptr<typed_value const>();
 	}
 }}
 
@@ -409,6 +418,10 @@ namespace jest {namespace patterns {
 			return value0 == value1;
 		}
 		else if (type0 == types::symbol)
+		{
+			return value0 == value1;
+		}
+		else if (type0 == types::operator_)
 		{
 			return value0 == value1;
 		}
@@ -1405,6 +1418,7 @@ namespace jest {namespace generation {
 
 namespace jest {namespace evaluation {
 	using namespace values;
+	using namespace primitives;
 
 	void fatal(char const* format, ...)
 	{
@@ -1420,8 +1434,11 @@ namespace jest {namespace evaluation {
 			shared_ptr<typed_value const> const& value,
 			shared_ptr<rule const> const& existing_rules)
 	{
-		assert(0);
-		return shared_ptr<rule const>();
+		return make_shared<rule>(
+				make_shared<pattern>(pattern_types::constant, symbol),
+				primitives::value(list(special_symbols::quote, value)),
+				shared_ptr<rule const>(),
+				existing_rules);
 	}
 
 	tuple<shared_ptr<typed_value const>, shared_ptr<rule const> > evaluate(
@@ -1538,12 +1555,16 @@ namespace jest {namespace evaluation {
 				evaluate_args(environment, cddr(cell));
 			return (*caller_fn)(environment, evaluated_args);
 		}
-		else if (cell->head == special_symbols::quote)
+
+		// Expressions of the form (quote <expr>) should simply return <expr>.
+		if (cell->head == special_symbols::quote)
 		{
 			assert(cddr(cell) == nil());
 			return cadr(cell);
 		}
 
+		// Otherwise we should evaluate the form by trying to match it against
+		// the set of rules.
 		shared_ptr<typed_value const> operator_val;
 		shared_ptr<rule const> operator_bindings;
 	   	tie(operator_val, operator_bindings) =
@@ -1572,7 +1593,7 @@ namespace jest {namespace evaluation {
 
 			return apply_rules(operator_->scoping_policy,
 					environment, environment, types::typed_cell,
-					evaluated_args);
+					cons(operator_val, evaluated_args));
 		}
 		else
 		{
@@ -1596,21 +1617,22 @@ namespace jest {namespace environment {
 	shared_ptr<typed_value const> default_evaluate(
 			shared_ptr<typed_value const> const& expression)
 	{
-		assert(0);
+		return evaluation::evaluate(detail::default_env, expression).get<0>();
 	}
 
 	void push_default_rule(shared_ptr<patterns::pattern const> const& pattern,
 			shared_ptr<typed_value const> const& expression,
 			shared_ptr<rule const> const& scope)
 	{
-		detail::default_env = make_shared<rule>(pattern, value(expression),
+		detail::default_env = make_shared<rule>(pattern, expression,
 				scope, detail::default_env);
 	}
 
 	void push_default_binding(shared_ptr<typed_value const> const& symbol,
 			shared_ptr<typed_value const> const& value)
 	{
-		assert(0);
+		detail::default_env = create_binding_rule(
+				symbol, value, detail::default_env);
 	}
 
 	void push_operator(shared_ptr<typed_value const> const& identifier,
@@ -1743,7 +1765,7 @@ namespace jest {namespace native {
 				make_shared<function<erased_signature> >(caller(fn));
 
 			shared_ptr<values::typed_value const> operator_value =
-				default_evaluate(value(symbol));
+				default_evaluate(symbol);
 			shared_ptr<values::operator_ const> operator_ =
 				downcast<values::operator_>(operator_value);
 
@@ -1882,15 +1904,15 @@ int main(int /*argc*/, char* /*argv*/[])
 						value(list(special_symbols::quote,
 								module_expression)))));
 
-		shared_ptr<typed_value const> module = evaluate(
-				get_default_environment(),
-				module_expression).get<0>();
+		//shared_ptr<typed_value const> module = evaluate(
+		//		get_default_environment(),
+		//		module_expression).get<0>();
 
-		evaluate(get_default_environment(),
-				value(list(
-						builtin_symbol("print"),
-						value(list(special_symbols::quote,
-								module)))));
+		//evaluate(get_default_environment(),
+		//		value(list(
+		//				builtin_symbol("print"),
+		//				value(list(special_symbols::quote,
+		//						module)))));
 
 		printf("\n");
 	}
