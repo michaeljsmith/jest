@@ -1383,6 +1383,13 @@ namespace jest {namespace generation {
 		{
 			using namespace primitives;
 
+			// We are defining a new member variable. We must do these things:
+			// * Rebind "self" to refer to a new type with a member var consed
+			// on the end.
+			// * Bind the variable name to be a reference to the member of
+			// self, using the self symbol so that nested references refer to
+			// the correct class.
+
 			return value(list(
 					special_symbols::var,
 					symbol(*target_symbol),
