@@ -377,10 +377,12 @@ namespace jest {namespace special_symbols {
 
 	shared_ptr<typed_value const> const quote = detail::symbol("quote");
 	shared_ptr<typed_value const> const var = detail::symbol("var");
+	shared_ptr<typed_value const> const const_ = detail::symbol("const");
+	shared_ptr<typed_value const> const value = detail::symbol("value");
+	shared_ptr<typed_value const> const cell = detail::symbol("cell");
 	shared_ptr<typed_value const> const def = detail::symbol("def");
 	shared_ptr<typed_value const> const rule = detail::symbol("rule");
 	shared_ptr<typed_value const> const module = detail::symbol("module");
-	shared_ptr<typed_value const> const pattern = detail::symbol("pattern");
 	shared_ptr<typed_value const> const native = detail::symbol("native");
 	shared_ptr<typed_value const> const template_ = detail::symbol("template");
 	shared_ptr<typed_value const> const members = detail::symbol("members");
@@ -513,6 +515,9 @@ namespace jest {namespace patterns {
 		else if (pattern_type == pattern_types::cell ||
 				pattern_type == pattern_types::value)
 		{
+			// The way value patterns match is weird, and may lead to problems
+			// in the future - currently the type is passed both as a separate
+			// variable and as part of the value.
 			shared_ptr<pattern const> pattern_head, pattern_tail;
 			shared_ptr<void const> value_head_type, value_head_value;
 			shared_ptr<void const> value_tail_type, value_tail_value;
@@ -1321,22 +1326,32 @@ namespace jest {namespace generation {
 	}
 
 	shared_ptr<typed_value const> generate_pattern(
+			shared_ptr<typed_value const> const& operator_,
 			vector<shared_ptr<parsing::parameter const> > const& parameters)
 	{
 		using namespace pattern_primitives;
 		using namespace primitives;
 
-		shared_ptr<typed_cell const> args = nil();
+		shared_ptr<typed_value const> args = value(list(special_symbols::cell));
 		for (int prm = int(parameters.size()) - 1; prm >= 0; --prm)
 		{
-			args = cons(
+			args = value(list(
+					special_symbols::cell,
 					value(list(
-						symbol(*parameters[prm]->name),
-						generate_expression(parameters[prm]->type))),
-					args);
+							special_symbols::value,
+							value(list(
+								special_symbols::const_,
+								generate_expression(parameters[prm]->type))),
+							value(list(
+								special_symbols::var,
+								symbol(*parameters[prm]->name))))),
+					args));
 		}
 
-		return value(cons(special_symbols::pattern, args));
+		return value(list(
+					special_symbols::cell,
+					value(list(special_symbols::const_, operator_)),
+					args));
 	}
 
 	struct define_generator :
@@ -1356,8 +1371,9 @@ namespace jest {namespace generation {
 
 			return value(list(
 					special_symbols::rule,
-					generate_expression(target_prototype->name),
-					generate_pattern(target_prototype->parameters),
+					generate_pattern(
+						generate_expression(target_prototype->name),
+						target_prototype->parameters),
 					generate_expression(this->expression)));
 		}
 
