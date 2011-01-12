@@ -1325,7 +1325,7 @@ namespace jest {namespace generation {
 		return apply_visitor(expression_generator(), *parse_expression);
 	}
 
-	shared_ptr<typed_value const> generate_pattern(
+	shared_ptr<typed_value const> generate_class_reference_pattern(
 			shared_ptr<typed_value const> const& operator_,
 			vector<shared_ptr<parsing::parameter const> > const& parameters)
 	{
@@ -1338,14 +1338,13 @@ namespace jest {namespace generation {
 			args = value(list(
 					special_symbols::cell,
 					value(list(
-							special_symbols::value,
-							value(list(
-								special_symbols::const_,
-								generate_expression(parameters[prm]->type))),
-							value(list(
-								special_symbols::var,
-								symbol(*parameters[prm]->name))))),
+							special_symbols::const_,
+							generate_expression(parameters[prm]->type))),
 					args));
+
+//							value(list(
+//								special_symbols::var,
+//								symbol(*parameters[prm]->name))))),
 		}
 
 		return value(list(
@@ -1371,7 +1370,7 @@ namespace jest {namespace generation {
 
 			return value(list(
 					special_symbols::rule,
-					generate_pattern(
+					generate_class_reference_pattern(
 						generate_expression(target_prototype->name),
 						target_prototype->parameters),
 					generate_expression(this->expression)));
