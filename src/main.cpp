@@ -1376,6 +1376,22 @@ namespace jest {namespace generation {
 					args));
 	}
 
+	shared_ptr<typed_cell const> generate_entity(
+			shared_ptr<parsing::prototype const> const& target_prototype,
+			shared_ptr<parsing::expression const> const& expression)
+	{
+		using namespace primitives;
+
+		shared_ptr<typed_value const> operator_name = gensym();
+
+		return list(value(list(
+						special_symbols::rule,
+						generate_entity_reference_pattern(
+							generate_expression(target_prototype->name),
+							target_prototype->parameters),
+						generate_expression(expression))));
+	}
+
 	struct define_generator :
 		public static_visitor<shared_ptr<typed_cell const> >
 	{
@@ -1389,16 +1405,7 @@ namespace jest {namespace generation {
 				shared_ptr<parsing::prototype const> const& target_prototype)
 			const
 		{
-			using namespace primitives;
-
-			shared_ptr<typed_value const> operator_name = gensym();
-
-			return list(value(list(
-							special_symbols::rule,
-							generate_entity_reference_pattern(
-								generate_expression(target_prototype->name),
-								target_prototype->parameters),
-							generate_expression(this->expression))));
+			return generate_entity(target_prototype, this->expression);
 		}
 
 		shared_ptr<typed_cell const> operator()(
