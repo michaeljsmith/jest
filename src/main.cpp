@@ -382,6 +382,7 @@ namespace jest {namespace special_symbols {
 	shared_ptr<typed_value const> const cell = detail::symbol("cell");
 	shared_ptr<typed_value const> const def = detail::symbol("def");
 	shared_ptr<typed_value const> const rule = detail::symbol("rule");
+	shared_ptr<typed_value const> const entity = detail::symbol("entity");
 	shared_ptr<typed_value const> const module = detail::symbol("module");
 	shared_ptr<typed_value const> const native = detail::symbol("native");
 	shared_ptr<typed_value const> const template_ = detail::symbol("template");
@@ -1353,6 +1354,25 @@ namespace jest {namespace generation {
 					args));
 	}
 
+	shared_ptr<typed_value const> generate_entity_invoke_pattern(
+			vector<shared_ptr<parsing::parameter const> > const& parameters)
+	{
+		using namespace pattern_primitives;
+		using namespace primitives;
+
+		shared_ptr<typed_cell const> args = nil();
+		for (int prm = int(parameters.size()) - 1; prm >= 0; --prm)
+		{
+			args = cons(
+					value(list(
+							generate_expression(parameters[prm]->type),
+							symbol(*parameters[prm]->name))),
+					args);
+		}
+
+		return value(args);
+	}
+
 	struct define_generator :
 		public static_visitor<shared_ptr<typed_value const> >
 	{
@@ -1369,9 +1389,8 @@ namespace jest {namespace generation {
 			using namespace primitives;
 
 			return value(list(
-					special_symbols::rule,
-					generate_class_reference_pattern(
-						generate_expression(target_prototype->name),
+					special_symbols::entity,
+					generate_entity_invoke_pattern(
 						target_prototype->parameters),
 					generate_expression(this->expression)));
 		}
