@@ -231,6 +231,18 @@ namespace jest {namespace primitives {
 						make_shared<string>(text))).first;
 	}
 
+	// Generate a unique symbol.
+	shared_ptr<typed_value const> gensym()
+	{
+		static int next_sym = 100;
+		int sym = next_sym++;
+		char buf[128];
+		sprintf(buf, "gensym%d", sym);
+		return make_shared<typed_value>(
+				types::symbol,
+				make_shared<string>(buf));
+	}
+
 	shared_ptr<typed_value const> builtin_symbol(string const& text)
 	{
 		static set<shared_ptr<typed_value const>, symbol_less> symbols;
@@ -245,6 +257,16 @@ namespace jest {namespace primitives {
 	{
 		shared_ptr<typed_cell const> cell(new typed_cell(head, tail));
 		return cell;
+	}
+
+	shared_ptr<typed_cell const> append(
+			shared_ptr<typed_cell const> const& first,
+			shared_ptr<typed_cell const> const& second)
+	{
+		if (!first)
+			return second;
+		else
+			return cons(first->head, append(first->tail, second));
 	}
 
 	int length(shared_ptr<typed_cell const> const& l)
@@ -1288,11 +1310,12 @@ namespace jest {namespace generation {
 
 	using namespace boost;
 	using namespace values;
+	using namespace primitives;
 
 	shared_ptr<typed_value const> generate_expression(
 			shared_ptr<parsing::expression const> const& parse_expression);
 
-	shared_ptr<typed_value const> generate_statement(
+	shared_ptr<typed_cell const> generate_statement(
 			shared_ptr<parsing::statement const> const& parse_statement);
 
 	struct expression_generator :
@@ -1313,7 +1336,7 @@ namespace jest {namespace generation {
 
 			shared_ptr<typed_cell const> args = nil();
 			for (int i = int(form->statements.size()) - 1; i >= 0; --i)
-				args = cons(generate_statement(form->statements[i]), args);
+				args = append(generate_statement(form->statements[i]), args);
 
 			return value(cons(generate_expression(form->head), args));
 		}
@@ -1325,7 +1348,7 @@ namespace jest {namespace generation {
 		return apply_visitor(expression_generator(), *parse_expression);
 	}
 
-	shared_ptr<typed_value const> generate_class_reference_pattern(
+	shared_ptr<typed_value const> generate_entity_reference_pattern(
 			shared_ptr<typed_value const> const& operator_,
 			vector<shared_ptr<parsing::parameter const> > const& parameters)
 	{
@@ -1354,7 +1377,7 @@ namespace jest {namespace generation {
 	}
 
 	struct define_generator :
-		public static_visitor<shared_ptr<typed_value const> >
+		public static_visitor<shared_ptr<typed_cell const> >
 	{
 		define_generator(
 				shared_ptr<parsing::expression const> const& expression)
@@ -1362,21 +1385,23 @@ namespace jest {namespace generation {
 
 		shared_ptr<parsing::expression const> expression;
 
-		shared_ptr<typed_value const> operator()(
+		shared_ptr<typed_cell const> operator()(
 				shared_ptr<parsing::prototype const> const& target_prototype)
 			const
 		{
 			using namespace primitives;
 
-			return value(list(
-					special_symbols::rule,
-					generate_class_reference_pattern(
-						generate_expression(target_prototype->name),
-						target_prototype->parameters),
-					generate_expression(this->expression)));
+			shared_ptr<typed_value const> operator_name = gensym();
+
+			return list(value(list(
+							special_symbols::rule,
+							generate_entity_reference_pattern(
+								generate_expression(target_prototype->name),
+								target_prototype->parameters),
+							generate_expression(this->expression))));
 		}
 
-		shared_ptr<typed_value const> operator()(
+		shared_ptr<typed_cell const> operator()(
 				shared_ptr<parsing::identifier const> const& target_symbol)
 			const
 		{
@@ -1389,14 +1414,14 @@ namespace jest {namespace generation {
 			// self, using the self symbol so that nested references refer to
 			// the correct class.
 
-			return value(list(
-					special_symbols::var,
-					symbol(*target_symbol),
-					generate_expression(this->expression)));
+			return list(value(list(
+							special_symbols::var,
+							symbol(*target_symbol),
+							generate_expression(this->expression))));
 		}
 	};
 
-	shared_ptr<typed_value const> generate_define(
+	shared_ptr<typed_cell const> generate_define(
 			shared_ptr<parsing::define const> const& define_syntax)
 	{
 		return apply_visitor(define_generator(define_syntax->expression),
@@ -1404,22 +1429,22 @@ namespace jest {namespace generation {
 	}
 
 	struct statement_generator :
-		public static_visitor<shared_ptr<typed_value const> >
+		public static_visitor<shared_ptr<typed_cell const> >
 	{
-		shared_ptr<typed_value const> operator()(
+		shared_ptr<typed_cell const> operator()(
 				shared_ptr<parsing::define const> const& define) const
 		{
 			return generate_define(define);
 		}
 
-		shared_ptr<typed_value const> operator()(
+		shared_ptr<typed_cell const> operator()(
 				shared_ptr<parsing::expression const> const& expression) const
 		{
-			return generate_expression(expression);
+			return list(generate_expression(expression));
 		}
 	};
 
-	shared_ptr<typed_value const> generate_statement(
+	shared_ptr<typed_cell const> generate_statement(
 			shared_ptr<parsing::statement const> const& parse_statement)
 	{
 		return apply_visitor(statement_generator(), *parse_statement);
@@ -1432,7 +1457,7 @@ namespace jest {namespace generation {
 
 		shared_ptr<typed_cell const> args = nil();
 		for (int i = int(module_syntax->defines.size()) - 1; i >= 0; --i)
-			args = cons(generate_define(module_syntax->defines[i]), args);
+			args = append(generate_define(module_syntax->defines[i]), args);
 
 		return value(cons(special_symbols::module, args));
 	}
