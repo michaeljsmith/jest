@@ -34,6 +34,8 @@ struct Symbol : public Value
 
 Value const* _f = new Value(0);
 
+Value const* default_env = 0;
+
 Value const* cons(Value const* head, Value const* tail)
 {
 	return new Cell(head, tail);
@@ -89,6 +91,14 @@ Value const* symbol(char const* s)
 	return (*pos).second;
 }
 
+Value const* gensym()
+{
+	static int next_id = 100;
+	char str[1024];
+	sprintf(str, "@gensym%d", next_id++);
+	return symbol(str);
+}
+
 bool symbolp(Value const* x)
 {
 	return x->type == symbol_type;
@@ -128,6 +138,12 @@ Value const* cdddr(Value const* x)
 {
 	assert(consp(x));
 	return cddr(((Cell*)x)->tail);
+}
+
+Value const* cadddr(Value const* x)
+{
+	assert(consp(x));
+	return caddr(((Cell*)x)->tail);
 }
 
 Value const* reverse_helper(Value const* l, Value const* x)
@@ -304,7 +320,7 @@ Value const* parse_symbol_statement(context* c)
 	if (accept(c, p_equal))
 	{
 		Value const* expression = parse_expression(c);
-		return list(symbol("defval"), identifier, expression);
+		return list(symbol("member"), identifier, expression);
 	}
 	else
 	{
@@ -355,7 +371,7 @@ Value const* parse_form_statement_contents(context* c)
 			Value const* parameters = cdr(field);
 			Value const* expression = cadr(tail);
 
-			return list(symbol("defun"), identifier, parameters, expression);
+			return list(symbol("entityfun"), identifier, parameters, expression);
 		}
 		// Check whether we have parsed a form.
 		else if (symbol("statements") == car(field))
@@ -546,7 +562,7 @@ Value const* parse_form_define(context* c)
 
 	Value const* expression = parse_expression(c);
 
-	return list(symbol("defun"), name, parameters, expression);
+	return list(symbol("entityfun"), name, parameters, expression);
 }
 
 //parameter =
@@ -642,10 +658,160 @@ void debug_print(Value const* x)
 	}
 }
 
+Value const* lookup_binding_helper(Value const* env, Value const* expr)
+{
+	for (Value const* current = env; current; current = cdr(current))
+	{
+		Value const* entry = car(current);
+		if (car(entry) == symbol("binding") && cadr(entry) == expr)
+		{
+			return entry;
+		}
+		else if (car(entry) == symbol("module"))
+		{
+			Value const* result = lookup_binding_helper(caddr(entry), expr);
+			if (result != _f)
+				return result;
+		}
+	}
+
+	return _f;
+}
+
+Value const* lookup_binding(Value const* env, Value const* expr)
+{
+	Value const* binding = lookup_binding_helper(env, expr);
+	return binding != _f ? caddr(binding) : _f;
+}
+
+Value const* evaluate_compiletime(Value const* env, Value const* expr)
+{
+	if (symbolp(expr))
+	{
+		return lookup_binding(env, expr);
+	}
+	else
+	{
+		assert(0);
+		return _f;
+	}
+}
+
+Value const* evaluate_entity(Value const* env, Value const* expr)
+{
+	Value const* entity = evaluate_compiletime(env, expr);
+	assert(entity != _f);
+	assert(car(entity) == symbol("entity"));
+	return entity;
+}
+
+Value const* evaluate_operator(Value const* env, Value const* expr)
+{
+	Value const* operator_ = evaluate_compiletime(env, expr);
+	assert(operator_ != _f);
+	assert(car(operator_) == symbol("operator"));
+	return operator_;
+}
+
+Value const* evaluate_parameter_types(Value const* env,
+		Value const* parameters)
+{
+	if (!parameters)
+		return 0;
+
+	Value const* parameter_expr = car(parameters);
+	Value const* parameter_type = car(parameter_expr);
+	Value const* parameter_name = cadr(parameter_expr);
+	return cons(list(evaluate_entity(env, parameter_type), parameter_name),
+			evaluate_parameter_types(env, cdr(parameters)));
+}
+
+Value const* compile_entityfun_implicit_operator(
+		Value const* env, Value const* entityfun_expr)
+{
+	assert(car(entityfun_expr) == symbol("entityfun"));
+
+	Value const* operator_expr = cadr(entityfun_expr);
+	if (symbolp(operator_expr))
+	{
+		// The name is a symbol. If this symbol is undefined, bind an operator
+		// to it.
+		if (lookup_binding(env, entityfun_expr) != _f)
+			return _f;
+
+		return list(symbol("binding"), operator_expr, list(symbol("operator")));
+	}
+
+	return _f;
+}
+
+Value const* compile_entityfun(Value const* env, Value const* scope_sym,
+		Value const* entityfun_expr)
+{
+	assert(car(entityfun_expr) == symbol("entityfun"));
+
+	Value const* operator_expr = cadr(entityfun_expr);
+	Value const* param_exprs = caddr(entityfun_expr);
+	Value const* expr = cadddr(entityfun_expr);
+
+	Value const* operator_ = evaluate_operator(env, operator_expr);
+	Value const* parameters = evaluate_parameter_types(env, param_exprs);
+	return list(symbol("entityfun"), operator_, parameters, expr);
+}
+
+Value const* evaluate_module(Value const* expr)
+{
+	Value const* env = default_env;
+
+	assert(symbol("module") == car(expr));
+
+	Value const* scope_sym = gensym();
+
+	Value const* module_entries = 0;
+	for (Value const* definitions = cdr(expr); definitions;
+			definitions = cdr(definitions))
+	{
+		Value const* definition = car(definitions);
+		if (car(definition) == symbol("entityfun"))
+		{
+			// Create an implicit operator if required.
+			Value const* implicit_op_binding =
+				compile_entityfun_implicit_operator(env, definition);
+			if (implicit_op_binding != _f)
+				env = cons(implicit_op_binding, env);
+
+			Value const* entityfun = compile_entityfun(
+					env, scope_sym, definition);
+			module_entries = cons(entityfun, module_entries);
+			env = cons(entityfun, env);
+		}
+		else
+		{
+			assert(0);
+			return _f;
+		}
+	}
+
+	// Add the lexical scope var to the environment.
+	env = cons(list(symbol("binding"), scope_sym, env), env);
+
+	return list(symbol("module"), env);
+}
+
+void initialize_default_environment()
+{
+}
+
 int main(int /*argc*/, char* /*argv*/[])
 {
+	initialize_default_environment();
+
 	Value const* module_ast = parse_file("test/test.jest");
 	debug_print(module_ast);
+	puts("");
+
+	Value const* module = evaluate_module(module_ast);
+	debug_print(module);
 	puts("");
 
 	return 0;
