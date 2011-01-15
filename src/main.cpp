@@ -371,7 +371,7 @@ Value const* parse_form_statement_contents(context* c)
 			Value const* parameters = cdr(field);
 			Value const* expression = cadr(tail);
 
-			return list(symbol("entityfun"), identifier, parameters, expression);
+			return list(symbol("typefun"), identifier, parameters, expression);
 		}
 		// Check whether we have parsed a form.
 		else if (symbol("statements") == car(field))
@@ -562,7 +562,7 @@ Value const* parse_form_define(context* c)
 
 	Value const* expression = parse_expression(c);
 
-	return list(symbol("entityfun"), name, parameters, expression);
+	return list(symbol("typefun"), name, parameters, expression);
 }
 
 //parameter =
@@ -697,12 +697,12 @@ Value const* evaluate_compiletime(Value const* env, Value const* expr)
 	}
 }
 
-Value const* evaluate_entity(Value const* env, Value const* expr)
+Value const* evaluate_type(Value const* env, Value const* expr)
 {
-	Value const* entity = evaluate_compiletime(env, expr);
-	assert(entity != _f);
-	assert(car(entity) == symbol("entity"));
-	return entity;
+	Value const* type = evaluate_compiletime(env, expr);
+	assert(type != _f);
+	assert(car(type) == symbol("type"));
+	return type;
 }
 
 Value const* evaluate_operator(Value const* env, Value const* expr)
@@ -722,21 +722,21 @@ Value const* evaluate_parameter_types(Value const* env,
 	Value const* parameter_expr = car(parameters);
 	Value const* parameter_type = car(parameter_expr);
 	Value const* parameter_name = cadr(parameter_expr);
-	return cons(list(evaluate_entity(env, parameter_type), parameter_name),
+	return cons(list(evaluate_type(env, parameter_type), parameter_name),
 			evaluate_parameter_types(env, cdr(parameters)));
 }
 
-Value const* compile_entityfun_implicit_operator(
-		Value const* env, Value const* entityfun_expr)
+Value const* compile_typefun_implicit_operator(
+		Value const* env, Value const* typefun_expr)
 {
-	assert(car(entityfun_expr) == symbol("entityfun"));
+	assert(car(typefun_expr) == symbol("typefun"));
 
-	Value const* operator_expr = cadr(entityfun_expr);
+	Value const* operator_expr = cadr(typefun_expr);
 	if (symbolp(operator_expr))
 	{
 		// The name is a symbol. If this symbol is undefined, bind an operator
 		// to it.
-		if (lookup_binding(env, entityfun_expr) != _f)
+		if (lookup_binding(env, typefun_expr) != _f)
 			return _f;
 
 		return list(symbol("binding"), operator_expr, list(symbol("operator")));
@@ -745,18 +745,18 @@ Value const* compile_entityfun_implicit_operator(
 	return _f;
 }
 
-Value const* compile_entityfun(Value const* env, Value const* scope_sym,
-		Value const* entityfun_expr)
+Value const* compile_typefun(Value const* env, Value const* scope_sym,
+		Value const* typefun_expr)
 {
-	assert(car(entityfun_expr) == symbol("entityfun"));
+	assert(car(typefun_expr) == symbol("typefun"));
 
-	Value const* operator_expr = cadr(entityfun_expr);
-	Value const* param_exprs = caddr(entityfun_expr);
-	Value const* expr = cadddr(entityfun_expr);
+	Value const* operator_expr = cadr(typefun_expr);
+	Value const* param_exprs = caddr(typefun_expr);
+	Value const* expr = cadddr(typefun_expr);
 
 	Value const* operator_ = evaluate_operator(env, operator_expr);
 	Value const* parameters = evaluate_parameter_types(env, param_exprs);
-	return list(symbol("entityfun"), operator_, parameters, expr);
+	return list(symbol("typefun"), operator_, parameters, expr);
 }
 
 Value const* evaluate_module(Value const* expr)
@@ -772,18 +772,18 @@ Value const* evaluate_module(Value const* expr)
 			definitions = cdr(definitions))
 	{
 		Value const* definition = car(definitions);
-		if (car(definition) == symbol("entityfun"))
+		if (car(definition) == symbol("typefun"))
 		{
 			// Create an implicit operator if required.
 			Value const* implicit_op_binding =
-				compile_entityfun_implicit_operator(env, definition);
+				compile_typefun_implicit_operator(env, definition);
 			if (implicit_op_binding != _f)
 				env = cons(implicit_op_binding, env);
 
-			Value const* entityfun = compile_entityfun(
+			Value const* typefun = compile_typefun(
 					env, scope_sym, definition);
-			module_entries = cons(entityfun, module_entries);
-			env = cons(entityfun, env);
+			module_entries = cons(typefun, module_entries);
+			env = cons(typefun, env);
 		}
 		else
 		{
@@ -800,6 +800,9 @@ Value const* evaluate_module(Value const* expr)
 
 void initialize_default_environment()
 {
+	// Declare int.
+	default_env = cons(list(symbol("binding"), symbol("int"),
+				list(symbol("type"))), default_env);
 }
 
 int main(int /*argc*/, char* /*argv*/[])
