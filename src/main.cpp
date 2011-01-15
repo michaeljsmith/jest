@@ -667,12 +667,12 @@ Value const* lookup_binding_helper(Value const* env, Value const* expr)
 		{
 			return entry;
 		}
-		else if (car(entry) == symbol("module"))
-		{
-			Value const* result = lookup_binding_helper(caddr(entry), expr);
-			if (result != _f)
-				return result;
-		}
+		//else if (car(entry) == symbol("module"))
+		//{
+		//	Value const* result = lookup_binding_helper(cadr(entry), expr);
+		//	if (result != _f)
+		//		return result;
+		//}
 	}
 
 	return _f;
@@ -689,6 +689,27 @@ Value const* evaluate_compiletime(Value const* env, Value const* expr)
 	if (symbolp(expr))
 	{
 		return lookup_binding(env, expr);
+	}
+	else if (consp(expr))
+	{
+		if (car(expr) == symbol("get"))
+		{
+			Value const* container = evaluate_compiletime(env, cadr(expr));
+			if (car(container) == symbol("module"))
+			{
+				return lookup_binding(cadr(container), caddr(expr));
+			}
+			else
+			{
+				assert(0);
+				return _f;
+			}
+		}
+		else
+		{
+			assert(0);
+			return _f;
+		}
 	}
 	else
 	{
@@ -778,7 +799,10 @@ Value const* evaluate_module(Value const* expr)
 			Value const* implicit_op_binding =
 				compile_typefun_implicit_operator(env, definition);
 			if (implicit_op_binding != _f)
+			{
+				module_entries = cons(implicit_op_binding, module_entries);
 				env = cons(implicit_op_binding, env);
+			}
 
 			Value const* typefun = compile_typefun(
 					env, scope_sym, definition);
@@ -793,9 +817,10 @@ Value const* evaluate_module(Value const* expr)
 	}
 
 	// Add the lexical scope var to the environment.
-	env = cons(list(symbol("binding"), scope_sym, env), env);
+	module_entries = cons(
+			list(symbol("binding"), scope_sym, env), module_entries);
 
-	return list(symbol("module"), env);
+	return list(symbol("module"), module_entries);
 }
 
 void initialize_default_environment()
@@ -814,7 +839,14 @@ int main(int /*argc*/, char* /*argv*/[])
 	puts("");
 
 	Value const* module = evaluate_module(module_ast);
-	debug_print(module);
+
+	Value const* env = default_env;
+	env = cons(module, env);
+	env = cons(list(symbol("binding"), symbol("__main__"), module), env);
+
+	Value const* operator_ = evaluate_compiletime(env,
+			list(symbol("get"), symbol("__main__"), symbol("testui")));
+	debug_print(operator_);
 	puts("");
 
 	return 0;
