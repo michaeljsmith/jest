@@ -823,6 +823,14 @@ Value const* evaluate_module(Value const* expr)
 	return list(symbol("module"), module_entries);
 }
 
+Value const* evaluate_type_form_recurse(Value const* env, Value const* expr)
+{
+}
+
+Value const* evaluate_type_form(Value const* env, Value const* expr)
+{
+}
+
 void initialize_default_environment()
 {
 	// Declare int.
