@@ -146,6 +146,12 @@ Value const* cadddr(Value const* x)
 	return caddr(((Cell*)x)->tail);
 }
 
+void set_car(Value* c, Value const* x)
+{
+	assert(consp(x));
+	((Cell*)c)->tail = x;
+}
+
 Value const* reverse_helper(Value const* l, Value const* x)
 {
 	if (0 == l)
@@ -157,6 +163,20 @@ Value const* reverse_helper(Value const* l, Value const* x)
 Value const* reverse(Value const* x)
 {
 	return reverse_helper(x, 0);
+}
+
+Value const* map_car(Value const* l)
+{
+	return cons(
+			car(car(l)),
+			map_car(cdr(l)));
+}
+
+Value const* map_cadr(Value const* l)
+{
+	return cons(
+			cadr(car(l)),
+			map_cadr(cdr(l)));
 }
 
 enum parsing_symbol
@@ -726,6 +746,12 @@ Value const* evaluate_type(Value const* env, Value const* expr)
 	return type;
 }
 
+Value const* evaluate_type_form(Value const* env, Value const* expr)
+{
+	assert(0);
+	return _f;
+}
+
 Value const* evaluate_operator(Value const* env, Value const* expr)
 {
 	Value const* operator_ = evaluate_compiletime(env, expr);
@@ -823,19 +849,84 @@ Value const* evaluate_module(Value const* expr)
 	return list(symbol("module"), module_entries);
 }
 
-Value const* evaluate_type_form_recurse(Value const* env, Value const* expr)
+Value const* evaluate_composite_member(
+		Value const* env, Value const* name,
+		Value* composite, Value const* form);
+
+Value const* evaluate_member_subforms(
+		Value const* env, Value* type, Value const* subfms)
 {
+	Value const* name = gensym();
+	Value const* child = evaluate_composite_member(
+			env, name, type, car(subfms));
+	Value const* child_type = caddr(child);
+	assert(car(child_type) == symbol("type"));
+	Value const* child_res = car(cadr(child_type));
+
+	return cons(
+			cons(child_res, name),
+			evaluate_member_subforms(env, type, cdr(subfms)));
 }
 
-Value const* evaluate_type_form(Value const* env, Value const* expr)
+Value const* evaluate_composite_member_form(
+		Value const* env, Value const* name,
+		Value* composite, Value const* form)
 {
+	Value const* child_info = evaluate_member_subforms(
+			env, composite, cdr(form));
+	Value const* child_types = map_car(child_info);
+	Value const* child_syms = map_cadr(child_info);
+
+	Value const* member_type = evaluate_type_form(
+			env, cons(car(form), child_types));
+
+	Value const* member = cons(
+			symbol("member"),
+			cons(
+				name,
+				cons(
+					member_type,
+					child_syms)));
+
+	set_car((Value*)cdr(composite), cons(member, cadr(composite)));
+
+	return member;
+}
+
+Value const* evaluate_composite_member(
+		Value const* env, Value const* name,
+		Value* composite, Value const* form)
+{
+	if (consp(form))
+	{
+		return evaluate_composite_member_form(env, name, composite, form);
+	}
+	else
+	{
+		assert(0);
+		return _f;
+	}
+}
+
+Value const* evaluate_composite_form(Value const* env, Value const* expr)
+{
+	Value* composite = (Value*)list(symbol("composite"), 0);
+
+	Value const* root = evaluate_composite_member_form(
+			env, gensym(), composite, expr);
+	Value const* root_type = caddr(root);
+	Value const* root_arg_types = cadr(root_type);
+
+	return list(symbol("type"), root_arg_types, composite);
 }
 
 void initialize_default_environment()
 {
 	// Declare int.
-	default_env = cons(list(symbol("binding"), symbol("int"),
-				list(symbol("type"))), default_env);
+	Value const* int_ = list(symbol("type"), list(0));
+	set_car((Value*)cadr(int_), int_);
+	default_env = cons(
+			list(symbol("binding"), symbol("int"), int_), default_env);
 }
 
 int main(int /*argc*/, char* /*argv*/[])
