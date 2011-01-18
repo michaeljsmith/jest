@@ -13,11 +13,11 @@ struct Value
 char const* cell_type = "cell";
 struct Cell : public Value
 {
-	Cell(Value const* head, Value const* tail):
+	Cell(Value* head, Value* tail):
 		Value(cell_type), head(head), tail(tail) {}
 
-	Value const* head;
-	Value const* tail;
+	Value* head;
+	Value* tail;
 };
 
 char const* symbol_type = "symbol";
@@ -32,66 +32,65 @@ struct Symbol : public Value
 	char* sym;
 };
 
-Value const* _f = new Value(0);
+Value* _f = new Value(0);
 
-Value const* default_env = 0;
+Value* default_env = 0;
 
-Value const* cons(Value const* head, Value const* tail)
+Value* cons(Value* head, Value* tail)
 {
 	return new Cell(head, tail);
 }
 
-bool consp(Value const* x)
+bool consp(Value* x)
 {
 	return x->type == cell_type;
 }
 
-Value const* list()
+Value* list()
 {
 	return 0;
 }
 
-Value const* list(Value const* x0)
+Value* list(Value* x0)
 {
 	return cons(x0, list());
 }
 
-Value const* list(Value const* x0, Value const* x1)
+Value* list(Value* x0, Value* x1)
 {
 	return cons(x0, list(x1));
 }
 
-Value const* list(Value const* x0, Value const* x1, Value const* x2)
+Value* list(Value* x0, Value* x1, Value* x2)
 {
 	return cons(x0, list(x1, x2));
 }
 
-Value const* list(Value const* x0, Value const* x1, Value const* x2,
-		Value const* x3)
+Value* list(Value* x0, Value* x1, Value* x2, Value* x3)
 {
 	return cons(x0, list(x1, x2, x3));
 }
 
 #include <map>
 #include <string>
-Value const* symbol(char const* s)
+Value* symbol(char const* s)
 {
 	using namespace std;
 
-	typedef map<string, Value const*> SymMap;
+	typedef map<string, Value*> SymMap;
 	static SymMap symbol_map;
 	string str(s);
 	SymMap::iterator pos = symbol_map.find(str);
 	if (pos == symbol_map.end())
 	{
-		Value const* symbol = new Symbol(s);
+		Value* symbol = new Symbol(s);
 		pos = symbol_map.insert(make_pair(str, symbol)).first;
 	}
 
 	return (*pos).second;
 }
 
-Value const* gensym()
+Value* gensym()
 {
 	static int next_id = 100;
 	char str[1024];
@@ -99,60 +98,60 @@ Value const* gensym()
 	return symbol(str);
 }
 
-bool symbolp(Value const* x)
+bool symbolp(Value* x)
 {
 	return x->type == symbol_type;
 }
 
-Value const* car(Value const* x)
+Value* car(Value* x)
 {
 	assert(consp(x));
 	return ((Cell*)x)->head;
 }
 
-Value const* cdr(Value const* x)
+Value* cdr(Value* x)
 {
 	assert(consp(x));
 	return ((Cell*)x)->tail;
 }
 
-Value const* cadr(Value const* x)
+Value* cadr(Value* x)
 {
 	assert(consp(x));
 	return car(((Cell*)x)->tail);
 }
 
-Value const* cddr(Value const* x)
+Value* cddr(Value* x)
 {
 	assert(consp(x));
 	return cdr(((Cell*)x)->tail);
 }
 
-Value const* caddr(Value const* x)
+Value* caddr(Value* x)
 {
 	assert(consp(x));
 	return cadr(((Cell*)x)->tail);
 }
 
-Value const* cdddr(Value const* x)
+Value* cdddr(Value* x)
 {
 	assert(consp(x));
 	return cddr(((Cell*)x)->tail);
 }
 
-Value const* cadddr(Value const* x)
+Value* cadddr(Value* x)
 {
 	assert(consp(x));
 	return caddr(((Cell*)x)->tail);
 }
 
-void set_car(Value* c, Value const* x)
+void set_car(Value* c, Value* x)
 {
 	assert(consp(x));
 	((Cell*)c)->tail = x;
 }
 
-Value const* reverse_helper(Value const* l, Value const* x)
+Value* reverse_helper(Value* l, Value* x)
 {
 	if (0 == l)
 		return x;
@@ -160,19 +159,19 @@ Value const* reverse_helper(Value const* l, Value const* x)
 	return reverse_helper(cdr(l), cons(car(l), x));
 }
 
-Value const* reverse(Value const* x)
+Value* reverse(Value* x)
 {
 	return reverse_helper(x, 0);
 }
 
-Value const* map_car(Value const* l)
+Value* map_car(Value* l)
 {
 	return cons(
 			car(car(l)),
 			map_car(cdr(l)));
 }
 
-Value const* map_cadr(Value const* l)
+Value* map_cadr(Value* l)
 {
 	return cons(
 			cadr(car(l)),
@@ -196,21 +195,21 @@ struct context
 	char ch;
 };
 
-Value const* parse_module(context* c);
-Value const* parse_define(context* c);
-Value const* parse_statement(context* c);
-Value const* parse_symbol_statement(context* c);
-Value const* parse_symbol_define(context* c);
-Value const* parse_form_statement(context* c);
-Value const* parse_form_statement_contents(context* c);
-Value const* parse_form_statement_tail(context* c);
-Value const* parse_non_thunk_tail(context* c);
-Value const* parse_define_tail(context* c);
-Value const* parse_form_expression_tail(context* c);
-Value const* parse_form_define(context* c);
-Value const* parse_parameter(context* c);
-Value const* parse_expression(context* c);
-Value const* parse_form_expression(context* c);
+Value* parse_module(context* c);
+Value* parse_define(context* c);
+Value* parse_statement(context* c);
+Value* parse_symbol_statement(context* c);
+Value* parse_symbol_define(context* c);
+Value* parse_form_statement(context* c);
+Value* parse_form_statement_contents(context* c);
+Value* parse_form_statement_tail(context* c);
+Value* parse_non_thunk_tail(context* c);
+Value* parse_define_tail(context* c);
+Value* parse_form_expression_tail(context* c);
+Value* parse_form_define(context* c);
+Value* parse_parameter(context* c);
+Value* parse_expression(context* c);
+Value* parse_form_expression(context* c);
 
 void read_symbol(context* c)
 {
@@ -283,11 +282,11 @@ void expect(context* c, parsing_symbol sym)
 	read_symbol(c);
 }
 
-Value const* parse_identifier(context* c)
+Value* parse_identifier(context* c)
 {
 	if (c->symbol == p_ident)
 	{
-		Value const* id = symbol(c->token);
+		Value* id = symbol(c->token);
 		read_symbol(c);
 		return id;
 	}
@@ -295,12 +294,12 @@ Value const* parse_identifier(context* c)
 }
 
 //module = {define}
-Value const* parse_module(context* c)
+Value* parse_module(context* c)
 {
-	Value const* defines_reverse = 0;
+	Value* defines_reverse = 0;
 	while (c->symbol != p_eof)
 	{
-		Value const* define = parse_define(c);
+		Value* define = parse_define(c);
 		assert(_f != define);
 		defines_reverse = cons(define, defines_reverse);
 	}
@@ -310,9 +309,9 @@ Value const* parse_module(context* c)
 //define =
 //	form_define
 //	| symbol_define
-Value const* parse_define(context* c)
+Value* parse_define(context* c)
 {
-	Value const* define = _f;
+	Value* define = _f;
 	define = (_f == define ? parse_form_define(c) : define);
 	define = (_f == define ? parse_symbol_define(c) : define);
 	return define;
@@ -321,9 +320,9 @@ Value const* parse_define(context* c)
 //statement =
 //	form_statement
 //	| symbol_statement
-Value const* parse_statement(context* c)
+Value* parse_statement(context* c)
 {
-	Value const* statement = _f;
+	Value* statement = _f;
 	statement = (_f == statement ? parse_form_statement(c) : statement);
 	statement = (_f == statement ? parse_symbol_statement(c) : statement);
 	return statement;
@@ -331,15 +330,15 @@ Value const* parse_statement(context* c)
 
 //symbol_statement =
 //	identifier ["=" expression]
-Value const* parse_symbol_statement(context* c)
+Value* parse_symbol_statement(context* c)
 {
-	Value const* identifier = parse_identifier(c);
+	Value* identifier = parse_identifier(c);
 	if (_f == identifier)
 		return _f;
 
 	if (accept(c, p_equal))
 	{
-		Value const* expression = parse_expression(c);
+		Value* expression = parse_expression(c);
 		return list(symbol("member"), identifier, expression);
 	}
 	else
@@ -350,22 +349,22 @@ Value const* parse_symbol_statement(context* c)
 
 //symbol_define =
 //	identifier "=" expression
-Value const* parse_symbol_define(context* c)
+Value* parse_symbol_define(context* c)
 {
-	Value const* identifier = parse_identifier(c);
+	Value* identifier = parse_identifier(c);
 	if (_f == identifier)
 		return 0;
 
 	expect(c, p_equal);
 
-	Value const* expression = parse_expression(c);
+	Value* expression = parse_expression(c);
 
 	return list(symbol("define"), identifier, expression);
 }
 
 //form_statement =
 //	"<" form_statement_contents
-Value const* parse_form_statement(context* c)
+Value* parse_form_statement(context* c)
 {
 	if (!accept(c, p_lt))
 		return _f;
@@ -375,28 +374,28 @@ Value const* parse_form_statement(context* c)
 //form_statement_contents =
 //	identifier form_statement_tail
 //	| {statement} ">"
-Value const* parse_form_statement_contents(context* c)
+Value* parse_form_statement_contents(context* c)
 {
-	Value const* identifier = parse_identifier(c);
+	Value* identifier = parse_identifier(c);
 	if (_f != identifier)
 	{
-		Value const* tail = parse_form_statement_tail(c);
+		Value* tail = parse_form_statement_tail(c);
 
 		assert(_f != tail);
-		Value const* field = car(tail);
+		Value* field = car(tail);
 
 		// Check whether we have parsed a new function.
 		if (symbol("parameters") == car(field))
 		{
-			Value const* parameters = cdr(field);
-			Value const* expression = cadr(tail);
+			Value* parameters = cdr(field);
+			Value* expression = cadr(tail);
 
 			return list(symbol("typefun"), identifier, parameters, expression);
 		}
 		// Check whether we have parsed a form.
 		else if (symbol("statements") == car(field))
 		{
-			Value const* statements = cdr(field);
+			Value* statements = cdr(field);
 			return cons(identifier, statements);
 		}
 		else
@@ -407,13 +406,13 @@ Value const* parse_form_statement_contents(context* c)
 	}
 	else
 	{
-		Value const* head = parse_expression(c);
+		Value* head = parse_expression(c);
 		assert(head);
 
-		Value const* statements_reverse = 0;
+		Value* statements_reverse = 0;
 		while (c->symbol != p_gt)
 		{
-			Value const* statement = parse_statement(c);
+			Value* statement = parse_statement(c);
 			assert(statement);
 			statements_reverse = cons(statement, statements_reverse);
 		}
@@ -428,24 +427,24 @@ Value const* parse_form_statement_contents(context* c)
 //	">" [define_tail]
 //	| identifier non_thunk_tail
 //	| {statement} ">"
-Value const* parse_form_statement_tail(context* c)
+Value* parse_form_statement_tail(context* c)
 {
 	if (c->symbol == p_gt)
 	{
-		Value const* expression = parse_define_tail(c);
+		Value* expression = parse_define_tail(c);
 		return list(list(symbol("parameters")), expression);
 	}
 	else
 	{
-		Value const* identifier = parse_identifier(c);
+		Value* identifier = parse_identifier(c);
 		if (_f != identifier)
 		{
-			Value const* tail = parse_non_thunk_tail(c);
+			Value* tail = parse_non_thunk_tail(c);
 			if (symbol("prototype") == car(tail))
 			{
-				Value const* initial_type = cadr(tail);
-				Value const* expression = caddr(tail);
-				Value const* subsequent_parameters = cdddr(tail);
+				Value* initial_type = cadr(tail);
+				Value* expression = caddr(tail);
+				Value* subsequent_parameters = cdddr(tail);
 
 				return list(
 						cons(
@@ -456,7 +455,7 @@ Value const* parse_form_statement_tail(context* c)
 			}
 			else if (symbol("form") == car(tail))
 			{
-				Value const* statements = cdr(tail);
+				Value* statements = cdr(tail);
 				return list(cons(symbol("statements"),
 							cons(identifier, statements)));
 			}
@@ -468,10 +467,10 @@ Value const* parse_form_statement_tail(context* c)
 		}
 		else
 		{
-			Value const* statements_reverse = 0;
+			Value* statements_reverse = 0;
 			while (c->symbol != p_gt)
 			{
-				Value const* statement = parse_statement(c);
+				Value* statement = parse_statement(c);
 				assert(_f != statement);
 				statements_reverse = cons(statement, statements_reverse);
 			}
@@ -486,24 +485,24 @@ Value const* parse_form_statement_tail(context* c)
 //non_thunk_tail =
 //	":" expression {parameter} ">" define_tail
 //	| {statement} ">"
-Value const* parse_non_thunk_tail(context* c)
+Value* parse_non_thunk_tail(context* c)
 {
 	if (accept(c, p_colon))
 	{
-		Value const* initial_type = parse_expression(c);
+		Value* initial_type = parse_expression(c);
 
-		Value const* subsequent_reverse = 0;
+		Value* subsequent_reverse = 0;
 		while (c->symbol != p_gt)
 		{
-			Value const* parameter = parse_parameter(c);
+			Value* parameter = parse_parameter(c);
 			assert(_f != parameter);
 			subsequent_reverse = cons(parameter, subsequent_reverse);
 		}
-		Value const* subsequent_parameters = reverse(subsequent_reverse);
+		Value* subsequent_parameters = reverse(subsequent_reverse);
 
 		expect(c, p_gt);
 
-		Value const* expression = parse_define_tail(c);
+		Value* expression = parse_define_tail(c);
 		return cons(symbol("prototype"),
 				cons(initial_type,
 					cons(expression,
@@ -511,14 +510,14 @@ Value const* parse_non_thunk_tail(context* c)
 	}
 	else
 	{
-		Value const* subsequent_reverse = 0;
+		Value* subsequent_reverse = 0;
 		while (c->symbol != p_gt)
 		{
-			Value const* statement = parse_statement(c);
+			Value* statement = parse_statement(c);
 			assert(_f != statement);
 			subsequent_reverse = cons(statement, subsequent_reverse);
 		}
-		Value const* subsequent_arguments = reverse(subsequent_reverse);
+		Value* subsequent_arguments = reverse(subsequent_reverse);
 
 		expect(c, p_gt);
 
@@ -528,12 +527,12 @@ Value const* parse_non_thunk_tail(context* c)
 
 //define_tail =
 //	"=" expression
-Value const* parse_define_tail(context* c)
+Value* parse_define_tail(context* c)
 {
 	if (!accept(c, p_equal))
 		return _f;
 
-	Value const* expression = parse_expression(c);
+	Value* expression = parse_expression(c);
 
 	assert(_f != expression);
 
@@ -542,13 +541,13 @@ Value const* parse_define_tail(context* c)
 
 //form_expression_tail =
 //	{statement} ">"
-Value const* parse_form_expression_tail(
+Value* parse_form_expression_tail(
 		context* c)
 {
-	Value const* statements_reverse = 0;
+	Value* statements_reverse = 0;
 	while (c->symbol != p_gt)
 	{
-		Value const* statement = parse_statement(c);
+		Value* statement = parse_statement(c);
 		assert(_f != statement);
 		statements_reverse = cons(statement, statements_reverse);
 	}
@@ -560,41 +559,41 @@ Value const* parse_form_expression_tail(
 
 //form_define =
 //	"<" expression {parameter} ">" = expression
-Value const* parse_form_define(context* c)
+Value* parse_form_define(context* c)
 {
 	if (!accept(c, p_lt))
 		return _f;
 
-	Value const* name = parse_expression(c);
+	Value* name = parse_expression(c);
 	assert(_f != name);
 
-	Value const* parameters_reverse = 0;
+	Value* parameters_reverse = 0;
 	while (c->symbol != p_gt)
 	{
-		Value const* parameter = parse_parameter(c);
+		Value* parameter = parse_parameter(c);
 		assert(_f != parameter);
 		parameters_reverse = cons(parameter, parameters_reverse);
 	}
-	Value const* parameters = reverse(parameters_reverse);
+	Value* parameters = reverse(parameters_reverse);
 
 	expect(c, p_gt);
 	expect(c, p_equal);
 
-	Value const* expression = parse_expression(c);
+	Value* expression = parse_expression(c);
 
 	return list(symbol("typefun"), name, parameters, expression);
 }
 
 //parameter =
 //	identifier ":" identifier
-Value const* parse_parameter(context* c)
+Value* parse_parameter(context* c)
 {
-	Value const* name = parse_identifier(c);
+	Value* name = parse_identifier(c);
 	assert(_f != name);
 
 	expect(c, p_colon);
 
-	Value const* type = parse_expression(c);
+	Value* type = parse_expression(c);
 	assert(_f != type);
 
 	return list(type, name);
@@ -603,9 +602,9 @@ Value const* parse_parameter(context* c)
 //expression =
 //	identifier
 //	| form_expression
-Value const* parse_expression(context* c)
+Value* parse_expression(context* c)
 {
-	Value const* identifier = parse_identifier(c);
+	Value* identifier = parse_identifier(c);
 	if (_f != identifier)
 		return identifier;
 	return parse_form_expression(c);
@@ -613,21 +612,21 @@ Value const* parse_expression(context* c)
 
 //form_expression =
 //	"<" expression form_expression_tail
-Value const* parse_form_expression(context* c)
+Value* parse_form_expression(context* c)
 {
 	if (!accept(c, p_lt))
 		return _f;
 
-	Value const* head = parse_expression(c);
+	Value* head = parse_expression(c);
 	assert(_f != head);
 
-	Value const* tail = parse_form_expression_tail(c);
+	Value* tail = parse_form_expression_tail(c);
 	assert(_f != tail);
 
 	return cons(head, tail);
 }
 
-Value const* parse_file(char const* filename)
+Value* parse_file(char const* filename)
 {
 	context c;
 	c.f = fopen(filename, "r");
@@ -645,7 +644,7 @@ Value const* parse_file(char const* filename)
 	return parse_module(&c);
 }
 
-void debug_print(Value const* x)
+void debug_print(Value* x)
 {
 	if (0 == x)
 	{
@@ -654,7 +653,7 @@ void debug_print(Value const* x)
 	else if (consp(x))
 	{
 		printf("(");
-		for (Value const* l = x; l; l = cdr(l))
+		for (Value* l = x; l; l = cdr(l))
 		{
 			if (consp(l))
 			{
@@ -678,18 +677,18 @@ void debug_print(Value const* x)
 	}
 }
 
-Value const* lookup_binding_helper(Value const* env, Value const* expr)
+Value* lookup_binding_helper(Value* env, Value* expr)
 {
-	for (Value const* current = env; current; current = cdr(current))
+	for (Value* current = env; current; current = cdr(current))
 	{
-		Value const* entry = car(current);
+		Value* entry = car(current);
 		if (car(entry) == symbol("binding") && cadr(entry) == expr)
 		{
 			return entry;
 		}
 		//else if (car(entry) == symbol("module"))
 		//{
-		//	Value const* result = lookup_binding_helper(cadr(entry), expr);
+		//	Value* result = lookup_binding_helper(cadr(entry), expr);
 		//	if (result != _f)
 		//		return result;
 		//}
@@ -698,13 +697,13 @@ Value const* lookup_binding_helper(Value const* env, Value const* expr)
 	return _f;
 }
 
-Value const* lookup_binding(Value const* env, Value const* expr)
+Value* lookup_binding(Value* env, Value* expr)
 {
-	Value const* binding = lookup_binding_helper(env, expr);
+	Value* binding = lookup_binding_helper(env, expr);
 	return binding != _f ? caddr(binding) : _f;
 }
 
-Value const* evaluate_compiletime(Value const* env, Value const* expr)
+Value* evaluate_compiletime(Value* env, Value* expr)
 {
 	if (symbolp(expr))
 	{
@@ -714,7 +713,7 @@ Value const* evaluate_compiletime(Value const* env, Value const* expr)
 	{
 		if (car(expr) == symbol("get"))
 		{
-			Value const* container = evaluate_compiletime(env, cadr(expr));
+			Value* container = evaluate_compiletime(env, cadr(expr));
 			if (car(container) == symbol("module"))
 			{
 				return lookup_binding(cadr(container), caddr(expr));
@@ -738,47 +737,103 @@ Value const* evaluate_compiletime(Value const* env, Value const* expr)
 	}
 }
 
-Value const* evaluate_type(Value const* env, Value const* expr)
+Value* evaluate_type(Value* env, Value* expr)
 {
-	Value const* type = evaluate_compiletime(env, expr);
+	Value* type = evaluate_compiletime(env, expr);
 	assert(type != _f);
 	assert(car(type) == symbol("type"));
 	return type;
 }
 
-Value const* evaluate_type_form(Value const* env, Value const* expr)
+Value* match_parameter_type(Value* pattern, Value* type)
 {
-	assert(0);
+	assert(car(pattern) == symbol("type"));
+	assert(car(type) == symbol("type"));
+	return (pattern == type) ? 0 : _f;
+}
+
+Value* match_parameter_type_list_recurse(
+		Value* pattern_list, Value* type_list)
+{
+	if (pattern_list == 0)
+		return type_list == 0 ? 0 : _f;
+
+	if (type_list == 0)
+		return _f;
+
+	Value* head_result = match_parameter_type(
+			car(pattern_list), car(type_list));
+	if (head_result == _f)
+		return _f;
+	return match_parameter_type_list_recurse(
+			cdr(pattern_list), cdr(type_list));
+}
+
+Value* match_parameter_type_list(Value* pattern_list, Value* type_list)
+{
+	return match_parameter_type_list_recurse(pattern_list, type_list);
+}
+
+Value* evaluate_composite_form(Value* env, Value* expr);
+
+Value* evaluate_type_form(Value* env, Value* form)
+{
+	for (Value* cur = env; cur; cur = cdr(cur))
+	{
+		Value* entry = car(cur);
+
+		if (car(entry) == symbol("module"))
+		{
+			Value* subres = evaluate_type_form(env, cadr(entry));
+			if (subres != _f)
+				return subres;
+		}
+
+		if (car(entry) != symbol("typefun"))
+			continue;
+
+		if (car(form) != cadr(entry))
+			continue;
+
+		Value* match_res = match_parameter_type_list(
+				caddr(entry), cdr(form));
+		if (match_res != _f)
+		{
+			Value* type = evaluate_composite_form(env, cadddr(entry));
+			return type;
+		}
+	}
+
 	return _f;
 }
 
-Value const* evaluate_operator(Value const* env, Value const* expr)
+Value* evaluate_operator(Value* env, Value* expr)
 {
-	Value const* operator_ = evaluate_compiletime(env, expr);
+	Value* operator_ = evaluate_compiletime(env, expr);
 	assert(operator_ != _f);
 	assert(car(operator_) == symbol("operator"));
 	return operator_;
 }
 
-Value const* evaluate_parameter_types(Value const* env,
-		Value const* parameters)
+Value* evaluate_parameter_types(Value* env,
+		Value* parameters)
 {
 	if (!parameters)
 		return 0;
 
-	Value const* parameter_expr = car(parameters);
-	Value const* parameter_type = car(parameter_expr);
-	Value const* parameter_name = cadr(parameter_expr);
+	Value* parameter_expr = car(parameters);
+	Value* parameter_type = car(parameter_expr);
+	Value* parameter_name = cadr(parameter_expr);
 	return cons(list(evaluate_type(env, parameter_type), parameter_name),
 			evaluate_parameter_types(env, cdr(parameters)));
 }
 
-Value const* compile_typefun_implicit_operator(
-		Value const* env, Value const* typefun_expr)
+Value* compile_typefun_implicit_operator(
+		Value* env, Value* typefun_expr)
 {
 	assert(car(typefun_expr) == symbol("typefun"));
 
-	Value const* operator_expr = cadr(typefun_expr);
+	Value* operator_expr = cadr(typefun_expr);
 	if (symbolp(operator_expr))
 	{
 		// The name is a symbol. If this symbol is undefined, bind an operator
@@ -792,37 +847,37 @@ Value const* compile_typefun_implicit_operator(
 	return _f;
 }
 
-Value const* compile_typefun(Value const* env, Value const* scope_sym,
-		Value const* typefun_expr)
+Value* compile_typefun(Value* env, Value* scope_sym,
+		Value* typefun_expr)
 {
 	assert(car(typefun_expr) == symbol("typefun"));
 
-	Value const* operator_expr = cadr(typefun_expr);
-	Value const* param_exprs = caddr(typefun_expr);
-	Value const* expr = cadddr(typefun_expr);
+	Value* operator_expr = cadr(typefun_expr);
+	Value* param_exprs = caddr(typefun_expr);
+	Value* expr = cadddr(typefun_expr);
 
-	Value const* operator_ = evaluate_operator(env, operator_expr);
-	Value const* parameters = evaluate_parameter_types(env, param_exprs);
+	Value* operator_ = evaluate_operator(env, operator_expr);
+	Value* parameters = evaluate_parameter_types(env, param_exprs);
 	return list(symbol("typefun"), operator_, parameters, expr);
 }
 
-Value const* evaluate_module(Value const* expr)
+Value* evaluate_module(Value* expr)
 {
-	Value const* env = default_env;
+	Value* env = default_env;
 
 	assert(symbol("module") == car(expr));
 
-	Value const* scope_sym = gensym();
+	Value* scope_sym = gensym();
 
-	Value const* module_entries = 0;
-	for (Value const* definitions = cdr(expr); definitions;
+	Value* module_entries = 0;
+	for (Value* definitions = cdr(expr); definitions;
 			definitions = cdr(definitions))
 	{
-		Value const* definition = car(definitions);
+		Value* definition = car(definitions);
 		if (car(definition) == symbol("typefun"))
 		{
 			// Create an implicit operator if required.
-			Value const* implicit_op_binding =
+			Value* implicit_op_binding =
 				compile_typefun_implicit_operator(env, definition);
 			if (implicit_op_binding != _f)
 			{
@@ -830,7 +885,7 @@ Value const* evaluate_module(Value const* expr)
 				env = cons(implicit_op_binding, env);
 			}
 
-			Value const* typefun = compile_typefun(
+			Value* typefun = compile_typefun(
 					env, scope_sym, definition);
 			module_entries = cons(typefun, module_entries);
 			env = cons(typefun, env);
@@ -849,38 +904,40 @@ Value const* evaluate_module(Value const* expr)
 	return list(symbol("module"), module_entries);
 }
 
-Value const* evaluate_composite_member(
-		Value const* env, Value const* name,
-		Value* composite, Value const* form);
+Value* evaluate_composite_member(
+		Value* env, Value* name,
+		Value* composite, Value* form);
 
-Value const* evaluate_member_subforms(
-		Value const* env, Value* type, Value const* subfms)
+Value* evaluate_member_subforms(
+		Value* env, Value* type, Value* subfms)
 {
-	Value const* name = gensym();
-	Value const* child = evaluate_composite_member(
+	Value* name = gensym();
+	Value* child = evaluate_composite_member(
 			env, name, type, car(subfms));
-	Value const* child_type = caddr(child);
+	Value* child_type = caddr(child);
 	assert(car(child_type) == symbol("type"));
-	Value const* child_res = car(cadr(child_type));
+	Value* child_res = car(cadr(child_type));
 
 	return cons(
 			cons(child_res, name),
 			evaluate_member_subforms(env, type, cdr(subfms)));
 }
 
-Value const* evaluate_composite_member_form(
-		Value const* env, Value const* name,
-		Value* composite, Value const* form)
+Value* evaluate_composite_member_form(
+		Value* env, Value* name,
+		Value* composite, Value* form)
 {
-	Value const* child_info = evaluate_member_subforms(
+	Value* child_info = evaluate_member_subforms(
 			env, composite, cdr(form));
-	Value const* child_types = map_car(child_info);
-	Value const* child_syms = map_cadr(child_info);
+	Value* child_types = map_car(child_info);
+	Value* child_syms = map_cadr(child_info);
 
-	Value const* member_type = evaluate_type_form(
-			env, cons(car(form), child_types));
+	Value* operator_ = evaluate_operator(env, car(form));
 
-	Value const* member = cons(
+	Value* member_type = evaluate_type_form(
+			env, cons(operator_, child_types));
+
+	Value* member = cons(
 			symbol("member"),
 			cons(
 				name,
@@ -888,18 +945,26 @@ Value const* evaluate_composite_member_form(
 					member_type,
 					child_syms)));
 
-	set_car((Value*)cdr(composite), cons(member, cadr(composite)));
+	set_car(cdr(composite), cons(member, cadr(composite)));
 
 	return member;
 }
 
-Value const* evaluate_composite_member(
-		Value const* env, Value const* name,
-		Value* composite, Value const* form)
+Value* evaluate_composite_member(
+		Value* env, Value* name,
+		Value* composite, Value* expr)
 {
-	if (consp(form))
+	if (consp(expr))
 	{
-		return evaluate_composite_member_form(env, name, composite, form);
+		return evaluate_composite_member_form(env, name, composite, expr);
+	}
+	else if (symbolp(expr))
+	{
+		Value* type = evaluate_type(env, expr);
+		Value* member = cons(
+				symbol("member"),
+				cons(name, type));
+		return member;
 	}
 	else
 	{
@@ -908,14 +973,14 @@ Value const* evaluate_composite_member(
 	}
 }
 
-Value const* evaluate_composite_form(Value const* env, Value const* expr)
+Value* evaluate_composite_form(Value* env, Value* expr)
 {
 	Value* composite = (Value*)list(symbol("composite"), 0);
 
-	Value const* root = evaluate_composite_member_form(
+	Value* root = evaluate_composite_member_form(
 			env, gensym(), composite, expr);
-	Value const* root_type = caddr(root);
-	Value const* root_arg_types = cadr(root_type);
+	Value* root_type = caddr(root);
+	Value* root_arg_types = cadr(root_type);
 
 	return list(symbol("type"), root_arg_types, composite);
 }
@@ -923,8 +988,8 @@ Value const* evaluate_composite_form(Value const* env, Value const* expr)
 void initialize_default_environment()
 {
 	// Declare int.
-	Value const* int_ = list(symbol("type"), list(0));
-	set_car((Value*)cadr(int_), int_);
+	Value* int_ = list(symbol("type"), list(0));
+	set_car(cadr(int_), int_);
 	default_env = cons(
 			list(symbol("binding"), symbol("int"), int_), default_env);
 }
@@ -933,20 +998,22 @@ int main(int /*argc*/, char* /*argv*/[])
 {
 	initialize_default_environment();
 
-	Value const* module_ast = parse_file("test/test.jest");
+	Value* module_ast = parse_file("test/test.jest");
 	debug_print(module_ast);
 	puts("");
 
-	Value const* module = evaluate_module(module_ast);
+	Value* module = evaluate_module(module_ast);
 
-	Value const* env = default_env;
+	Value* env = default_env;
 	env = cons(module, env);
 	env = cons(list(symbol("binding"), symbol("__main__"), module), env);
 
-	Value const* operator_ = evaluate_compiletime(env,
+	Value* operator_ = evaluate_compiletime(env,
 			list(symbol("get"), symbol("__main__"), symbol("testui")));
-	debug_print(operator_);
-	puts("");
+	Value* int_ = evaluate_type(env, symbol("int"));
+	Value* composite = evaluate_type_form(env, list(operator_, int_));
+	//debug_print(composite);
+	//puts("");
 
 	return 0;
 }
