@@ -32,6 +32,18 @@ struct Symbol : public Value
 	char* sym;
 };
 
+char const* string_type = "string";
+struct String : public Value
+{
+	String(char const* text): Value(string_type)
+	{
+		this->text = (char*)malloc(strlen(text) + 1);
+		strcpy(this->text, text);
+	}
+
+	char* text;
+};
+
 Value* _f = new Value(0);
 
 Value* default_env = 0;
@@ -101,6 +113,40 @@ Value* gensym()
 bool symbolp(Value* x)
 {
 	return x->type == symbol_type;
+}
+
+bool stringp(Value* x)
+{
+	return x->type == string_type;
+}
+
+Value* str(char const* text)
+{
+	return new String(text);
+}
+
+Value* symbol_name(Value* sym)
+{
+	assert(symbolp(sym));
+	return str(((Symbol*)sym)->sym);
+}
+
+const char* text(Value* s)
+{
+	assert(stringp(s));
+	return ((String*)s)->text;
+}
+
+Value* concatenate(Value* l, Value* r)
+{
+	char const* tl = text(l);
+	char const* tr = text(r);
+	char* buf = new char [strlen(tl) + strlen(tr) + 1];
+	strcpy(buf, tl);
+	strcat(buf, tr);
+	Value* res = str(buf);
+	delete [] buf;
+	return res;
 }
 
 Value* car(Value* x)
@@ -689,6 +735,10 @@ void debug_print_recurse(Value* x, std::set<Value*>& printed_cells)
 		char const* str = ((Symbol*)x)->sym;
 		fputs(str, stdout);
 	}
+	else if (stringp(x))
+	{
+		fputs(text(x), stdout);
+	}
 }
 
 void debug_print(Value* x)
@@ -796,7 +846,47 @@ Value* match_parameter_type_list(Value* pattern_list, Value* type_list)
 	return match_parameter_type_list_recurse(pattern_list, type_list);
 }
 
-Value* evaluate_composite_form(Value* env, Value* expr);
+Value* evaluate_composite_form(Value* env, Value* name, Value* expr);
+
+Value* get_type_debug_name(Value* type)
+{
+	Value* name = caddr(type);
+	assert(stringp(name));
+	return name;
+}
+
+Value* format_composite_name_recurse(Value* args)
+{
+	if (args == 0)
+		return str("()");
+
+	if (cdr(args) == 0)
+		return concatenate(get_type_debug_name(car(args)), str(")"));
+
+	return concatenate(concatenate(get_type_debug_name(car(args)), str(" ")),
+			format_composite_name_recurse(cdr(args)));
+}
+
+Value* get_typefun_operator(Value* typefun)
+{
+	Value* operator_ = cadr(typefun);
+	assert(car(operator_) == symbol("operator"));
+	return operator_;
+}
+
+Value* get_operator_debug_name(Value* operator_)
+{
+	return cadr(operator_);
+}
+
+Value* format_composite_name(Value* typefun, Value* args)
+{
+	Value* operator_name = get_operator_debug_name(
+			get_typefun_operator(typefun));
+
+	return concatenate(concatenate(operator_name, str("(")),
+			format_composite_name_recurse(args));
+}
 
 Value* evaluate_typefun_form_recurse(Value* env, Value* scope, Value* form)
 {
@@ -819,7 +909,9 @@ Value* evaluate_typefun_form_recurse(Value* env, Value* scope, Value* form)
 					caddr(entry), cdr(form));
 			if (match_res != _f)
 			{
-				Value* type = evaluate_composite_form(env, cadddr(entry));
+				Value* type = evaluate_composite_form(
+						env, format_composite_name(entry, cdr(form)),
+						cadddr(entry));
 				return type;
 			}
 		}
@@ -867,7 +959,8 @@ Value* compile_typefun_implicit_operator(
 		if (lookup_binding(env, typefun_expr) != _f)
 			return _f;
 
-		return list(symbol("binding"), operator_expr, list(symbol("operator")));
+		return list(symbol("binding"), operator_expr,
+				list(symbol("operator"), symbol_name(operator_expr)));
 	}
 
 	return _f;
@@ -1012,7 +1105,7 @@ Value* evaluate_composite_member(
 	}
 }
 
-Value* evaluate_composite_form(Value* env, Value* expr)
+Value* evaluate_composite_form(Value* env, Value* name, Value* expr)
 {
 	Value* composite = (Value*)list(symbol("composite"), 0);
 
@@ -1021,13 +1114,13 @@ Value* evaluate_composite_form(Value* env, Value* expr)
 	Value* root_type = caddr(root);
 	Value* root_arg_types = cadr(root_type);
 
-	return list(symbol("type"), root_arg_types, composite);
+	return list(symbol("type"), root_arg_types, name, composite);
 }
 
 void initialize_default_environment()
 {
 	// Declare int.
-	Value* int_ = list(symbol("type"), list(0));
+	Value* int_ = list(symbol("type"), list(0), str("int"));
 	set_car(cadr(int_), int_);
 	default_env = cons(
 			list(symbol("binding"), symbol("int"), int_), default_env);
