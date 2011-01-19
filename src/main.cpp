@@ -648,7 +648,8 @@ Value* parse_file(char const* filename)
 	return parse_module(&c);
 }
 
-void debug_print(Value* x)
+#include <set>
+void debug_print_recurse(Value* x, std::set<Value*>& printed_cells)
 {
 	if (0 == x)
 	{
@@ -656,29 +657,45 @@ void debug_print(Value* x)
 	}
 	else if (consp(x))
 	{
-		printf("(");
-		for (Value* l = x; l; l = cdr(l))
+		if (printed_cells.find(x) != printed_cells.end())
 		{
-			if (consp(l))
-			{
-				debug_print(car(l));
-				if (cdr(l))
-					printf(" ");
-			}
-			else
-			{
-				printf(" . ");
-				debug_print(l);
-				break;
-			}
+			printf("(...)");
 		}
-		printf(")");
+		else
+		{
+			printed_cells.insert(x);
+
+			printf("(");
+			for (Value* l = x; l; l = cdr(l))
+			{
+				if (consp(l))
+				{
+					debug_print_recurse(car(l), printed_cells);
+					if (cdr(l))
+						printf(" ");
+				}
+				else
+				{
+					printf(" . ");
+					debug_print_recurse(l, printed_cells);
+					break;
+				}
+			}
+			printf(")");
+		}
 	}
 	else if (symbolp(x))
 	{
 		char const* str = ((Symbol*)x)->sym;
 		fputs(str, stdout);
 	}
+}
+
+void debug_print(Value* x)
+{
+	std::set<Value*> printed_cells;
+
+	debug_print_recurse(x, printed_cells);
 }
 
 Value* lookup_binding_helper(Value* env, Value* expr)
@@ -813,7 +830,7 @@ Value* evaluate_typefun_form_recurse(Value* env, Value* scope, Value* form)
 
 Value* evaluate_typefun_form(Value* env, Value* form)
 {
-	evaluate_typefun_form_recurse(env, env, form);
+	return evaluate_typefun_form_recurse(env, env, form);
 }
 
 Value* evaluate_operator(Value* env, Value* expr)
@@ -1034,8 +1051,8 @@ int main(int /*argc*/, char* /*argv*/[])
 			list(symbol("get"), symbol("__main__"), symbol("testui")));
 	Value* int_ = evaluate_type(env, symbol("int"));
 	Value* composite = evaluate_typefun_form(env, list(operator_, int_));
-	//debug_print(composite);
-	//puts("");
+	debug_print(composite);
+	puts("");
 
 	return 0;
 }
