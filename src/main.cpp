@@ -350,6 +350,7 @@ Value* parse_module(context* c)
 	while (c->symbol != p_eof)
 	{
 		Value* define = parse_define(c);
+		assert(define);
 		assert(_f != define);
 		defines_reverse = cons(define, defines_reverse);
 	}
@@ -363,7 +364,9 @@ Value* parse_define(context* c)
 {
 	Value* define = _f;
 	define = (_f == define ? parse_form_define(c) : define);
+	assert(define);
 	define = (_f == define ? parse_symbol_define(c) : define);
+	assert(define);
 	return define;
 }
 
@@ -479,10 +482,13 @@ Value* parse_form_statement_contents(context* c)
 //	| {statement} ">"
 Value* parse_form_statement_tail(context* c)
 {
-	if (c->symbol == p_gt)
+	if (accept(c, p_gt))
 	{
 		Value* expression = parse_define_tail(c);
-		return list(list(symbol("parameters")), expression);
+		if (expression == _f)
+			return list(list(symbol("statements")));
+		else
+			return list(list(symbol("parameters")), expression);
 	}
 	else
 	{
@@ -695,57 +701,76 @@ Value* parse_file(char const* filename)
 }
 
 #include <set>
-void debug_print_recurse(Value* x, std::set<Value*>& printed_cells)
+#define FORMAT(x) do \
+{char const* s = (x); strcpy(buf, s); buf += strlen(s);} while(0)
+void debug_format_recurse(
+		char*& buf, Value* x, std::set<Value*>& printed_cells)
 {
 	if (0 == x)
 	{
-		printf("()");
+		FORMAT("()");
 	}
 	else if (consp(x))
 	{
 		if (printed_cells.find(x) != printed_cells.end())
 		{
-			printf("(...)");
+			FORMAT("(...)");
 		}
 		else
 		{
 			printed_cells.insert(x);
 
-			printf("(");
+			FORMAT("(");
 			for (Value* l = x; l; l = cdr(l))
 			{
 				if (consp(l))
 				{
-					debug_print_recurse(car(l), printed_cells);
+					debug_format_recurse(buf, car(l), printed_cells);
 					if (cdr(l))
-						printf(" ");
+						FORMAT(" ");
 				}
 				else
 				{
-					printf(" . ");
-					debug_print_recurse(l, printed_cells);
+					FORMAT(" . ");
+					debug_format_recurse(buf, l, printed_cells);
 					break;
 				}
 			}
-			printf(")");
+			FORMAT(")");
 		}
 	}
 	else if (symbolp(x))
 	{
 		char const* str = ((Symbol*)x)->sym;
-		fputs(str, stdout);
+		FORMAT(str);
 	}
 	else if (stringp(x))
 	{
-		fputs(text(x), stdout);
+		FORMAT(text(x));
 	}
 }
+#undef FORMAT
 
 void debug_print(Value* x)
 {
+	char buffer[1000000];
+	char* buf = buffer;
+
 	std::set<Value*> printed_cells;
 
-	debug_print_recurse(x, printed_cells);
+	debug_format_recurse(buf, x, printed_cells);
+	fputs(buffer, stdout);
+}
+
+char* debug_format(Value* x)
+{
+	static char buffer[1000000];
+	char* buf = buffer;
+
+	std::set<Value*> printed_cells;
+
+	debug_format_recurse(buf, x, printed_cells);
+	return buffer;
 }
 
 Value* lookup_binding_helper(Value* env, Value* expr)
@@ -1093,9 +1118,7 @@ Value* evaluate_composite_member(
 	else if (symbolp(expr))
 	{
 		Value* type = evaluate_type(env, expr);
-		Value* member = cons(
-				symbol("member"),
-				cons(name, type));
+		Value* member = list(symbol("member"), name, type);
 		return member;
 	}
 	else
