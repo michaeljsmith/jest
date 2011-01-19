@@ -166,6 +166,8 @@ Value* reverse(Value* x)
 
 Value* map_car(Value* l)
 {
+	if (l == 0)
+		return 0;
 	return cons(
 			car(car(l)),
 			map_car(cdr(l)));
@@ -173,6 +175,8 @@ Value* map_car(Value* l)
 
 Value* map_cadr(Value* l)
 {
+	if (l == 0)
+		return 0;
 	return cons(
 			cadr(car(l)),
 			map_cadr(cdr(l)));
@@ -747,9 +751,10 @@ Value* evaluate_type(Value* env, Value* expr)
 
 Value* match_parameter_type(Value* pattern, Value* type)
 {
-	assert(car(pattern) == symbol("type"));
+	Value* pattern_type = car(pattern);
+	assert(car(pattern_type) == symbol("type"));
 	assert(car(type) == symbol("type"));
-	return (pattern == type) ? 0 : _f;
+	return (pattern_type == type) ? 0 : _f;
 }
 
 Value* match_parameter_type_list_recurse(
@@ -776,35 +781,39 @@ Value* match_parameter_type_list(Value* pattern_list, Value* type_list)
 
 Value* evaluate_composite_form(Value* env, Value* expr);
 
-Value* evaluate_type_form(Value* env, Value* form)
+Value* evaluate_typefun_form_recurse(Value* env, Value* scope, Value* form)
 {
-	for (Value* cur = env; cur; cur = cdr(cur))
+	for (Value* cur = scope; cur; cur = cdr(cur))
 	{
 		Value* entry = car(cur);
 
 		if (car(entry) == symbol("module"))
 		{
-			Value* subres = evaluate_type_form(env, cadr(entry));
+			Value* subres = evaluate_typefun_form_recurse(env, cadr(entry), form);
 			if (subres != _f)
 				return subres;
 		}
-
-		if (car(entry) != symbol("typefun"))
-			continue;
-
-		if (car(form) != cadr(entry))
-			continue;
-
-		Value* match_res = match_parameter_type_list(
-				caddr(entry), cdr(form));
-		if (match_res != _f)
+		else if (car(entry) == symbol("typefun"))
 		{
-			Value* type = evaluate_composite_form(env, cadddr(entry));
-			return type;
+			if (car(form) != cadr(entry))
+				continue;
+
+			Value* match_res = match_parameter_type_list(
+					caddr(entry), cdr(form));
+			if (match_res != _f)
+			{
+				Value* type = evaluate_composite_form(env, cadddr(entry));
+				return type;
+			}
 		}
 	}
 
 	return _f;
+}
+
+Value* evaluate_typefun_form(Value* env, Value* form)
+{
+	evaluate_typefun_form_recurse(env, env, form);
 }
 
 Value* evaluate_operator(Value* env, Value* expr)
@@ -911,6 +920,9 @@ Value* evaluate_composite_member(
 Value* evaluate_member_subforms(
 		Value* env, Value* type, Value* subfms)
 {
+	if (subfms == 0)
+		return 0;
+
 	Value* name = gensym();
 	Value* child = evaluate_composite_member(
 			env, name, type, car(subfms));
@@ -932,10 +944,20 @@ Value* evaluate_composite_member_form(
 	Value* child_types = map_car(child_info);
 	Value* child_syms = map_cadr(child_info);
 
-	Value* operator_ = evaluate_operator(env, car(form));
+	Value* operator_ = evaluate_compiletime(env, car(form));
+	assert(operator_ != _f);
 
-	Value* member_type = evaluate_type_form(
-			env, cons(operator_, child_types));
+	Value* member_type = _f;
+	if (car(operator_) == symbol("operator"))
+	{
+		member_type = evaluate_typefun_form(
+				env, cons(operator_, child_types));
+	}
+	else if (car(operator_) == symbol("type"))
+	{
+		assert(child_syms == 0);
+		member_type = operator_;
+	}
 
 	Value* member = cons(
 			symbol("member"),
@@ -998,7 +1020,7 @@ int main(int /*argc*/, char* /*argv*/[])
 {
 	initialize_default_environment();
 
-	Value* module_ast = parse_file("test/test.jest");
+	Value* module_ast = parse_file("test/test2.jest");
 	debug_print(module_ast);
 	puts("");
 
@@ -1011,7 +1033,7 @@ int main(int /*argc*/, char* /*argv*/[])
 	Value* operator_ = evaluate_compiletime(env,
 			list(symbol("get"), symbol("__main__"), symbol("testui")));
 	Value* int_ = evaluate_type(env, symbol("int"));
-	Value* composite = evaluate_type_form(env, list(operator_, int_));
+	Value* composite = evaluate_typefun_form(env, list(operator_, int_));
 	//debug_print(composite);
 	//puts("");
 
