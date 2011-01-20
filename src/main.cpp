@@ -228,7 +228,7 @@ bool list_shallow_equal(Value* l0, Value* l1)
 		return true;
 	if (0 == l0 || 0 == l1)
 		return false;
-	return car(l0) == car(l1) && list_equal(cdr(l0), cdr(l1));
+	return car(l0) == car(l1) && list_shallow_equal(cdr(l0), cdr(l1));
 }
 
 Value* reverse_helper(Value* l, Value* x)
@@ -1200,10 +1200,23 @@ Value* create_type_list(
 			cons(evaluate_type(env, symbol(x0)), tail));
 }
 
+Value* create_type_list(Value* env, char const* t,
+		char const* x0, char const* x1, Value* tail)
+{
+	return create_type_list(env, t, x0,
+			cons(evaluate_type(env, symbol(x1)), tail));
+}
+
 void register_type(Value*& env, char const* name, char const* t,
 		char const* x0)
 {
 	return register_type_list(env, name, create_type_list(env, t, x0, 0));
+}
+
+void register_type(Value*& env, char const* name, char const* t,
+		char const* x0, char const* x1)
+{
+	return register_type_list(env, name, create_type_list(env, t, x0, x1, 0));
 }
 
 void initialize_default_environment()
@@ -1212,7 +1225,8 @@ void initialize_default_environment()
 	register_primitive(default_env, "window");
 	register_type(default_env, "label", "window", "int");
 	register_type(default_env, "edit", "window", "int");
-	register_type(default_env, "horizontal", "window", "int");
+	register_type(default_env, "horizontal", "window", "window", "window");
+	register_type(default_env, "frame", "window", "window");
 }
 
 int main(int /*argc*/, char* /*argv*/[])
