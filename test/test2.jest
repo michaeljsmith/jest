@@ -1,6 +1,8 @@
 <testui n:int> =
 	<frame
 
+		i = <int>
+
 		<horizontal
 			<label n>
-			<edit n>>>
+			<edit i>>>

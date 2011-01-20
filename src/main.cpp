@@ -426,7 +426,7 @@ Value* parse_symbol_statement(context* c)
 	if (accept(c, p_equal))
 	{
 		Value* expression = parse_expression(c);
-		return list(symbol("member"), identifier, expression);
+		return list(symbol("@member"), identifier, expression);
 	}
 	else
 	{
@@ -1090,25 +1090,8 @@ Value* evaluate_module(Value* expr)
 	return list(symbol("module"), module_entries);
 }
 
-Value* evaluate_composite_member(Value* env, Value* composite, Value* form);
-
 Value* evaluate_member_subforms(
-		Value* env, Value* type, Value* subfms)
-{
-	if (subfms == 0)
-		return 0;
-
-	Value* child = evaluate_composite_member(env, type, car(subfms));
-	assert(car(child) == symbol("member"));
-	Value* name = cadr(child);
-	Value* child_type = caddr(child);
-	assert(car(child_type) == symbol("type"));
-	Value* child_res = car(cadr(child_type));
-
-	return cons(
-			list(child_res, name),
-			evaluate_member_subforms(env, type, cdr(subfms)));
-}
+		Value* env, Value* composite, Value* subfms);
 
 Value* evaluate_composite_member_form(
 		Value* env, Value* composite, Value* form)
@@ -1180,6 +1163,44 @@ Value* evaluate_composite_member(Value* env, Value* composite, Value* expr)
 		assert(0);
 		return _f;
 	}
+}
+
+Value* bind_named_composite_member(
+		Value*& env, Value* composite, Value* name, Value* expr)
+{
+	Value* member = evaluate_composite_member_form(env, composite, expr);
+	env = cons(list(symbol("binding"), name,
+				list(symbol("memberref"), member)), env);
+	return member;
+}
+
+Value* evaluate_member_subforms(
+		Value* env, Value* composite, Value* subfms)
+{
+	if (subfms == 0)
+		return 0;
+
+	Value* expr = car(subfms);
+
+	// Check whether this is a named member.
+	if (consp(expr) && car(expr) == symbol("@member"))
+	{
+		bind_named_composite_member(
+				env, composite, cadr(expr), caddr(expr));
+		return evaluate_member_subforms(env, composite, cdr(subfms));
+	}
+
+	// Otherwise it is a positional argument.
+	Value* child = evaluate_composite_member(env, composite, expr);
+	assert(car(child) == symbol("member"));
+	Value* name = cadr(child);
+	Value* child_type = caddr(child);
+	assert(car(child_type) == symbol("type"));
+	Value* child_res = car(cadr(child_type));
+
+	return cons(
+			list(child_res, name),
+			evaluate_member_subforms(env, composite, cdr(subfms)));
 }
 
 Value* bind_composite_parameters(Value*& env, Value* parameters, int idx)
