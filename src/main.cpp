@@ -744,6 +744,10 @@ void debug_format_recurse(
 	{
 		FORMAT("()");
 	}
+	else if (_f == x)
+	{
+		FORMAT("_f");
+	}
 	else if (consp(x))
 	{
 		if (printed_cells.find(x) != printed_cells.end())
@@ -905,8 +909,6 @@ Value* match_parameter_type_list(Value* pattern_list, Value* type_list)
 	return match_parameter_type_list_recurse(pattern_list, type_list);
 }
 
-Value* evaluate_composite_form(Value* env, Value* name, Value* expr);
-
 Value* get_type_debug_name(Value* type)
 {
 	Value* name = caddr(type);
@@ -947,6 +949,9 @@ Value* format_composite_name(Value* typefun, Value* args)
 			format_composite_name_recurse(args));
 }
 
+Value* evaluate_composite(
+		Value* env, Value* name, Value* parameters, Value* expr);
+
 Value* evaluate_typefun_form_recurse(Value* env, Value* scope, Value* form)
 {
 	for (Value* cur = scope; cur; cur = cdr(cur))
@@ -968,9 +973,12 @@ Value* evaluate_typefun_form_recurse(Value* env, Value* scope, Value* form)
 					caddr(entry), cdr(form));
 			if (match_res != _f)
 			{
-				Value* type = evaluate_composite_form(
+				// TODO: Bind template parameters from match_res to
+				// environment.
+				Value* parameters = caddr(entry);
+				Value* type = evaluate_composite(
 						env, format_composite_name(entry, cdr(form)),
-						cadddr(entry));
+						parameters, cadddr(entry));
 				return type;
 			}
 		}
@@ -1082,9 +1090,7 @@ Value* evaluate_module(Value* expr)
 	return list(symbol("module"), module_entries);
 }
 
-Value* evaluate_composite_member(
-		Value* env, Value* name,
-		Value* composite, Value* form);
+Value* evaluate_composite_member(Value* env, Value* composite, Value* form);
 
 Value* evaluate_member_subforms(
 		Value* env, Value* type, Value* subfms)
@@ -1092,9 +1098,9 @@ Value* evaluate_member_subforms(
 	if (subfms == 0)
 		return 0;
 
-	Value* name = gensym();
-	Value* child = evaluate_composite_member(
-			env, name, type, car(subfms));
+	Value* child = evaluate_composite_member(env, type, car(subfms));
+	assert(car(child) == symbol("member"));
+	Value* name = cadr(child);
 	Value* child_type = caddr(child);
 	assert(car(child_type) == symbol("type"));
 	Value* child_res = car(cadr(child_type));
@@ -1105,9 +1111,10 @@ Value* evaluate_member_subforms(
 }
 
 Value* evaluate_composite_member_form(
-		Value* env, Value* name,
-		Value* composite, Value* form)
+		Value* env, Value* composite, Value* form)
 {
+	Value* name = gensym();
+
 	Value* child_info = evaluate_member_subforms(
 			env, composite, cdr(form));
 	Value* child_types = map_car(child_info);
@@ -1128,6 +1135,10 @@ Value* evaluate_composite_member_form(
 		assert(list_shallow_equal(child_types, cdr(type_arg_types)));
 		member_type = operator_;
 	}
+	else
+	{
+		assert(0);
+	}
 
 	Value* member = cons(
 			symbol("member"),
@@ -1142,19 +1153,27 @@ Value* evaluate_composite_member_form(
 	return member;
 }
 
-Value* evaluate_composite_member(
-		Value* env, Value* name,
-		Value* composite, Value* expr)
+Value* evaluate_composite_member(Value* env, Value* composite, Value* expr)
 {
 	if (consp(expr))
 	{
-		return evaluate_composite_member_form(env, name, composite, expr);
+		return evaluate_composite_member_form(env, composite, expr);
 	}
 	else if (symbolp(expr))
 	{
-		Value* type = evaluate_type(env, expr);
-		Value* member = list(symbol("member"), name, type);
-		return member;
+		Value* value = evaluate_compiletime(env, expr);
+		assert(value != _f);
+		if (car(value) == symbol("memberref"))
+		{
+			Value* member = cadr(value);
+			assert(car(member) == symbol("member"));
+			return member;
+		}
+		else
+		{
+			assert(0);
+			return _f;
+		}
 	}
 	else
 	{
@@ -1163,16 +1182,42 @@ Value* evaluate_composite_member(
 	}
 }
 
-Value* evaluate_composite_form(Value* env, Value* name, Value* expr)
+Value* bind_composite_parameters(Value*& env, Value* parameters, int idx)
 {
-	Value* composite = (Value*)list(symbol("composite"), 0);
+	if (parameters == 0)
+		return 0;
 
-	Value* root = evaluate_composite_member_form(
-			env, gensym(), composite, expr);
+	Value* parameter = car(parameters);
+	Value* type = car(parameter);
+	Value* name = cadr(parameter);
+	Value* member_name = gensym();
+
+	char name_buf[1024];
+	sprintf(name_buf, "arg%d", idx);
+	Value* reference_type = list(symbol("type"), list(type), str(name_buf),
+			list(symbol("argument"), symbol(name_buf)));
+	Value* member = list(symbol("member"), member_name, reference_type);
+
+	// Add the member ref to the env.
+	env = cons(list(symbol("binding"), name,
+				list(symbol("memberref"), member)), env);
+
+	return cons(member,
+			bind_composite_parameters(env, cdr(parameters), idx + 1));
+}
+
+Value* evaluate_composite(
+		Value* env, Value* name, Value* parameters, Value* expr)
+{
+	Value* parameter_bindings = bind_composite_parameters(env, parameters, 0);
+	Value* composite = (Value*)list(symbol("composite"), parameter_bindings);
+
+	Value* root = evaluate_composite_member_form(env, composite, expr);
 	Value* root_type = caddr(root);
 	Value* root_arg_types = cadr(root_type);
 
-	return list(symbol("type"), root_arg_types, name, composite);
+	return list(symbol("type"), cons(car(root_arg_types),
+			map_cadr(parameters)), name, composite);
 }
 
 void register_primitive(Value*& env, char const* name)
