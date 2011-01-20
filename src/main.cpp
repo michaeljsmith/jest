@@ -58,6 +58,11 @@ bool consp(Value* x)
 	return x->type == cell_type;
 }
 
+bool listp(Value* x)
+{
+	return 0 == x || consp(x);
+}
+
 Value* list()
 {
 	return 0;
@@ -194,7 +199,36 @@ Value* cadddr(Value* x)
 void set_car(Value* c, Value* x)
 {
 	assert(consp(x));
-	((Cell*)c)->tail = x;
+	((Cell*)c)->head = x;
+}
+
+bool equal(Value* x0, Value* x1);
+
+bool list_equal(Value* l0, Value* l1)
+{
+	if (0 == l0 && 0 == l1)
+		return true;
+	if (0 == l0 || 0 == l1)
+		return false;
+	return equal(car(l0), car(l1)) && list_equal(cdr(l0), cdr(l1));
+}
+
+bool equal(Value* x0, Value* x1)
+{
+	if (listp(x0) && listp(x1))
+		return list_equal(x0, x1);
+	if (listp(x0) || listp(x1))
+		return false;
+	return x0 == x1;
+}
+
+bool list_shallow_equal(Value* l0, Value* l1)
+{
+	if (0 == l0 && 0 == l1)
+		return true;
+	if (0 == l0 || 0 == l1)
+		return false;
+	return car(l0) == car(l1) && list_equal(cdr(l0), cdr(l1));
 }
 
 Value* reverse_helper(Value* l, Value* x)
@@ -1066,7 +1100,7 @@ Value* evaluate_member_subforms(
 	Value* child_res = car(cadr(child_type));
 
 	return cons(
-			cons(child_res, name),
+			list(child_res, name),
 			evaluate_member_subforms(env, type, cdr(subfms)));
 }
 
@@ -1090,7 +1124,8 @@ Value* evaluate_composite_member_form(
 	}
 	else if (car(operator_) == symbol("type"))
 	{
-		assert(child_syms == 0);
+		Value* type_arg_types = cadr(operator_);
+		assert(list_shallow_equal(child_types, cdr(type_arg_types)));
 		member_type = operator_;
 	}
 
@@ -1140,13 +1175,44 @@ Value* evaluate_composite_form(Value* env, Value* name, Value* expr)
 	return list(symbol("type"), root_arg_types, name, composite);
 }
 
+void register_primitive(Value*& env, char const* name)
+{
+	Value* type = list(symbol("type"), list(0), str(name));
+	set_car(cadr(type), type);
+	env = cons(list(symbol("binding"), symbol(name), type), env);
+}
+
+void register_type_list(Value*& env, char const* name, Value* args)
+{
+	Value* type = list(symbol("type"), args, str(name));
+	env = cons(list(symbol("binding"), symbol(name), type), env);
+}
+
+Value* create_type_list(Value* env, char const* t, Value* tail)
+{
+	return cons(evaluate_type(env, symbol(t)), tail);
+}
+
+Value* create_type_list(
+		Value* env, char const* t, char const* x0, Value* tail)
+{
+	return create_type_list(env, t,
+			cons(evaluate_type(env, symbol(x0)), tail));
+}
+
+void register_type(Value*& env, char const* name, char const* t,
+		char const* x0)
+{
+	return register_type_list(env, name, create_type_list(env, t, x0, 0));
+}
+
 void initialize_default_environment()
 {
-	// Declare int.
-	Value* int_ = list(symbol("type"), list(0), str("int"));
-	set_car(cadr(int_), int_);
-	default_env = cons(
-			list(symbol("binding"), symbol("int"), int_), default_env);
+	register_primitive(default_env, "int");
+	register_primitive(default_env, "window");
+	register_type(default_env, "label", "window", "int");
+	register_type(default_env, "edit", "window", "int");
+	register_type(default_env, "horizontal", "window", "int");
 }
 
 int main(int /*argc*/, char* /*argv*/[])
