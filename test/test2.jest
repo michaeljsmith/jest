@@ -1,8 +1,11 @@
 <testui n:int> =
 	<frame
 
+		<foo x:int> =
+			<label x>
+
 		i = <int>
 
 		<horizontal
-			<label n>
+			<foo n>
 			<edit i>>>

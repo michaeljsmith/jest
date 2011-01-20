@@ -477,7 +477,7 @@ Value* parse_form_statement_contents(context* c)
 			Value* parameters = cdr(field);
 			Value* expression = cadr(tail);
 
-			return list(symbol("typefun"), identifier, parameters, expression);
+			return list(symbol("@typefun"), identifier, parameters, expression);
 		}
 		// Check whether we have parsed a form.
 		else if (symbol("statements") == car(field))
@@ -671,7 +671,7 @@ Value* parse_form_define(context* c)
 
 	Value* expression = parse_expression(c);
 
-	return list(symbol("typefun"), name, parameters, expression);
+	return list(symbol("@typefun"), name, parameters, expression);
 }
 
 //parameter =
@@ -964,7 +964,7 @@ Value* evaluate_typefun_form_recurse(Value* env, Value* scope, Value* form)
 			if (subres != _f)
 				return subres;
 		}
-		else if (car(entry) == symbol("typefun"))
+		else if (car(entry) == symbol("@typefun"))
 		{
 			if (car(form) != cadr(entry))
 				continue;
@@ -1016,7 +1016,7 @@ Value* evaluate_parameter_types(Value* env,
 Value* compile_typefun_implicit_operator(
 		Value* env, Value* typefun_expr)
 {
-	assert(car(typefun_expr) == symbol("typefun"));
+	assert(car(typefun_expr) == symbol("@typefun"));
 
 	Value* operator_expr = cadr(typefun_expr);
 	if (symbolp(operator_expr))
@@ -1033,10 +1033,9 @@ Value* compile_typefun_implicit_operator(
 	return _f;
 }
 
-Value* compile_typefun(Value* env, Value* scope_sym,
-		Value* typefun_expr)
+Value* compile_typefun(Value* env, Value* typefun_expr)
 {
-	assert(car(typefun_expr) == symbol("typefun"));
+	assert(car(typefun_expr) == symbol("@typefun"));
 
 	Value* operator_expr = cadr(typefun_expr);
 	Value* param_exprs = caddr(typefun_expr);
@@ -1044,7 +1043,7 @@ Value* compile_typefun(Value* env, Value* scope_sym,
 
 	Value* operator_ = evaluate_operator(env, operator_expr);
 	Value* parameters = evaluate_parameter_types(env, param_exprs);
-	return list(symbol("typefun"), operator_, parameters, expr);
+	return list(symbol("@typefun"), operator_, parameters, expr);
 }
 
 Value* evaluate_module(Value* expr)
@@ -1053,14 +1052,14 @@ Value* evaluate_module(Value* expr)
 
 	assert(symbol("module") == car(expr));
 
-	Value* scope_sym = gensym();
+	//Value* scope_sym = gensym();
 
 	Value* module_entries = 0;
 	for (Value* definitions = cdr(expr); definitions;
 			definitions = cdr(definitions))
 	{
 		Value* definition = car(definitions);
-		if (car(definition) == symbol("typefun"))
+		if (car(definition) == symbol("@typefun"))
 		{
 			// Create an implicit operator if required.
 			Value* implicit_op_binding =
@@ -1071,8 +1070,7 @@ Value* evaluate_module(Value* expr)
 				env = cons(implicit_op_binding, env);
 			}
 
-			Value* typefun = compile_typefun(
-					env, scope_sym, definition);
+			Value* typefun = compile_typefun(env, definition);
 			module_entries = cons(typefun, module_entries);
 			env = cons(typefun, env);
 		}
@@ -1083,9 +1081,9 @@ Value* evaluate_module(Value* expr)
 		}
 	}
 
-	// Add the lexical scope var to the environment.
-	module_entries = cons(
-			list(symbol("binding"), scope_sym, env), module_entries);
+	//// Add the lexical scope var to the environment.
+	//module_entries = cons(
+	//		list(symbol("binding"), scope_sym, env), module_entries);
 
 	return list(symbol("module"), module_entries);
 }
@@ -1181,6 +1179,21 @@ Value* evaluate_member_subforms(
 		return 0;
 
 	Value* expr = car(subfms);
+
+	// Check whether this is a nested function.
+	if (consp(expr) && car(expr) == symbol("@typefun"))
+	{
+		// Create an implicit operator if required.
+		Value* implicit_op_binding =
+			compile_typefun_implicit_operator(env, expr);
+		if (implicit_op_binding != _f)
+			env = cons(implicit_op_binding, env);
+
+		Value* typefun = compile_typefun(env, expr);
+		env = cons(typefun, env);
+
+		return evaluate_member_subforms(env, composite, cdr(subfms));
+	}
 
 	// Check whether this is a named member.
 	if (consp(expr) && car(expr) == symbol("@member"))
