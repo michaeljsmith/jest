@@ -88,6 +88,11 @@ Value* list(Value* x0, Value* x1, Value* x2, Value* x3)
 	return cons(x0, list(x1, x2, x3));
 }
 
+Value* list(Value* x0, Value* x1, Value* x2, Value* x3, Value* x4)
+{
+	return cons(x0, list(x1, x2, x3, x4));
+}
+
 #include <map>
 #include <string>
 Value* symbol(char const* s)
@@ -194,6 +199,18 @@ Value* cadddr(Value* x)
 {
 	assert(consp(x));
 	return caddr(((Cell*)x)->tail);
+}
+
+Value* cddddr(Value* x)
+{
+	assert(consp(x));
+	return cdddr(((Cell*)x)->tail);
+}
+
+Value* caddddr(Value* x)
+{
+	assert(consp(x));
+	return cadddr(((Cell*)x)->tail);
 }
 
 void set_car(Value* c, Value* x)
@@ -950,7 +967,7 @@ Value* format_composite_name(Value* typefun, Value* args)
 }
 
 Value* evaluate_composite(
-		Value* env, Value* name, Value* parameters, Value* expr);
+		Value* env, Value* name, Value* parameters, Value* expr, Value* scope);
 
 Value* evaluate_typefun_form_recurse(Value* env, Value* scope, Value* form)
 {
@@ -978,7 +995,7 @@ Value* evaluate_typefun_form_recurse(Value* env, Value* scope, Value* form)
 				Value* parameters = caddr(entry);
 				Value* type = evaluate_composite(
 						env, format_composite_name(entry, cdr(form)),
-						parameters, cadddr(entry));
+						parameters, cadddr(entry), caddddr(entry));
 				return type;
 			}
 		}
@@ -1043,7 +1060,7 @@ Value* compile_typefun(Value* env, Value* typefun_expr)
 
 	Value* operator_ = evaluate_operator(env, operator_expr);
 	Value* parameters = evaluate_parameter_types(env, param_exprs);
-	return list(symbol("@typefun"), operator_, parameters, expr);
+	return list(symbol("@typefun"), operator_, parameters, expr, env);
 }
 
 Value* evaluate_module(Value* expr)
@@ -1096,6 +1113,7 @@ Value* evaluate_composite_member_form(
 {
 	Value* name = gensym();
 
+	Value* scope = list(symbol("scope"), 
 	Value* child_info = evaluate_member_subforms(
 			env, composite, cdr(form));
 	Value* child_types = map_car(child_info);
@@ -1241,12 +1259,12 @@ Value* bind_composite_parameters(Value*& env, Value* parameters, int idx)
 }
 
 Value* evaluate_composite(
-		Value* env, Value* name, Value* parameters, Value* expr)
+		Value* env, Value* name, Value* parameters, Value* expr, Value* scope)
 {
-	Value* parameter_bindings = bind_composite_parameters(env, parameters, 0);
+	Value* parameter_bindings = bind_composite_parameters(scope, parameters, 0);
 	Value* composite = (Value*)list(symbol("composite"), parameter_bindings);
 
-	Value* root = evaluate_composite_member_form(env, composite, expr);
+	Value* root = evaluate_composite_member_form(scope, composite, expr);
 	Value* root_type = caddr(root);
 	Value* root_arg_types = cadr(root_type);
 
