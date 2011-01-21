@@ -1173,7 +1173,10 @@ Value* evaluate_composite_member(Value* env, Value* composite, Value* expr)
 		assert(value != _f);
 		if (car(value) == symbol("memberref"))
 		{
-			Value* member = cadr(value);
+			Value* member_composite = cadr(value);
+			assert(car(member_composite) == symbol("composite"));
+			assert(member_composite == composite);
+			Value* member = caddr(value);
 			assert(car(member) == symbol("member"));
 			return member;
 		}
@@ -1196,7 +1199,7 @@ Value* bind_named_composite_member(
 {
 	Value* member = evaluate_composite_member_form(env, composite, expr);
 	set_car(scope_cell, cons(list(symbol("binding"), name,
-				list(symbol("memberref"), member)), car(scope_cell)));
+				list(symbol("memberref"), composite, member)), car(scope_cell)));
 	return member;
 }
 
@@ -1256,7 +1259,7 @@ Value* evaluate_member_subforms(Value* env, Value* composite, Value* subfms)
 	return evaluate_member_subforms_recurse(env, composite, subfms, scope);
 }
 
-Value* bind_composite_parameters(Value*& env, Value* parameters, int idx)
+Value* bind_composite_parameters(Value*& env, Value* composite, Value* parameters, int idx)
 {
 	if (parameters == 0)
 		return 0;
@@ -1274,17 +1277,19 @@ Value* bind_composite_parameters(Value*& env, Value* parameters, int idx)
 
 	// Add the member ref to the env.
 	env = cons(list(symbol("binding"), name,
-				list(symbol("memberref"), member)), env);
+				list(symbol("memberref"), composite, member)), env);
 
 	return cons(member,
-			bind_composite_parameters(env, cdr(parameters), idx + 1));
+			bind_composite_parameters(env, composite, cdr(parameters), idx + 1));
 }
 
 Value* evaluate_composite(
 		Value* env, Value* name, Value* parameters, Value* expr, Value* scope)
 {
-	Value* parameter_bindings = bind_composite_parameters(scope, parameters, 0);
-	Value* composite = (Value*)list(symbol("composite"), parameter_bindings);
+	Value* composite = (Value*)list(symbol("composite"), 0);
+	Value* parameter_bindings = bind_composite_parameters(
+			scope, composite, parameters, 0);
+	set_car(cdr(composite), parameter_bindings);
 
 	Value* root = evaluate_composite_member_form(scope, composite, expr);
 	Value* root_type = caddr(root);
