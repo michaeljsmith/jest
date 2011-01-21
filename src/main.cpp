@@ -837,6 +837,12 @@ Value* lookup_binding_helper(Value* env, Value* expr)
 		{
 			return entry;
 		}
+		else if (car(entry) == symbol("scope"))
+		{
+			Value* result = lookup_binding_helper(cadr(entry), expr);
+			if (result != _f)
+				return result;
+		}
 		//else if (car(entry) == symbol("module"))
 		//{
 		//	Value* result = lookup_binding_helper(cadr(entry), expr);
@@ -862,7 +868,7 @@ Value* evaluate_compiletime(Value* env, Value* expr)
 	}
 	else if (consp(expr))
 	{
-		if (car(expr) == symbol("get"))
+		if (car(expr) == symbol("@get"))
 		{
 			Value* container = evaluate_compiletime(env, cadr(expr));
 			if (car(container) == symbol("module"))
@@ -976,6 +982,12 @@ Value* evaluate_typefun_form_recurse(Value* env, Value* scope, Value* form)
 		Value* entry = car(cur);
 
 		if (car(entry) == symbol("module"))
+		{
+			Value* subres = evaluate_typefun_form_recurse(env, cadr(entry), form);
+			if (subres != _f)
+				return subres;
+		}
+		else if (car(entry) == symbol("scope"))
 		{
 			Value* subres = evaluate_typefun_form_recurse(env, cadr(entry), form);
 			if (subres != _f)
@@ -1105,17 +1117,14 @@ Value* evaluate_module(Value* expr)
 	return list(symbol("module"), module_entries);
 }
 
-Value* evaluate_member_subforms(
-		Value* env, Value* composite, Value* subfms);
+Value* evaluate_member_subforms(Value* env, Value* composite, Value* subfms);
 
 Value* evaluate_composite_member_form(
 		Value* env, Value* composite, Value* form)
 {
 	Value* name = gensym();
 
-	Value* scope = list(symbol("scope"), 
-	Value* child_info = evaluate_member_subforms(
-			env, composite, cdr(form));
+	Value* child_info = evaluate_member_subforms(env, composite, cdr(form));
 	Value* child_types = map_car(child_info);
 	Value* child_syms = map_cadr(child_info);
 
@@ -1182,21 +1191,24 @@ Value* evaluate_composite_member(Value* env, Value* composite, Value* expr)
 }
 
 Value* bind_named_composite_member(
-		Value*& env, Value* composite, Value* name, Value* expr)
+		Value* env, Value* scope_cell, Value* composite,
+		Value* name, Value* expr)
 {
 	Value* member = evaluate_composite_member_form(env, composite, expr);
-	env = cons(list(symbol("binding"), name,
-				list(symbol("memberref"), member)), env);
+	set_car(scope_cell, cons(list(symbol("binding"), name,
+				list(symbol("memberref"), member)), car(scope_cell)));
 	return member;
 }
 
-Value* evaluate_member_subforms(
-		Value* env, Value* composite, Value* subfms)
+Value* evaluate_member_subforms_recurse(
+		Value* env, Value* composite, Value* subfms, Value* scope)
 {
 	if (subfms == 0)
 		return 0;
 
 	Value* expr = car(subfms);
+
+	Value* scope_cell = cdr(scope);
 
 	// Check whether this is a nested function.
 	if (consp(expr) && car(expr) == symbol("@typefun"))
@@ -1205,20 +1217,22 @@ Value* evaluate_member_subforms(
 		Value* implicit_op_binding =
 			compile_typefun_implicit_operator(env, expr);
 		if (implicit_op_binding != _f)
-			env = cons(implicit_op_binding, env);
+			set_car(scope_cell, cons(implicit_op_binding, car(scope_cell)));
 
 		Value* typefun = compile_typefun(env, expr);
-		env = cons(typefun, env);
+		set_car(scope_cell, cons(typefun, car(scope_cell)));
 
-		return evaluate_member_subforms(env, composite, cdr(subfms));
+		return evaluate_member_subforms_recurse(
+				env, composite, cdr(subfms), scope);
 	}
 
 	// Check whether this is a named member.
 	if (consp(expr) && car(expr) == symbol("@member"))
 	{
 		bind_named_composite_member(
-				env, composite, cadr(expr), caddr(expr));
-		return evaluate_member_subforms(env, composite, cdr(subfms));
+				env, scope_cell, composite, cadr(expr), caddr(expr));
+		return evaluate_member_subforms_recurse(
+				env, composite, cdr(subfms), scope);
 	}
 
 	// Otherwise it is a positional argument.
@@ -1231,7 +1245,15 @@ Value* evaluate_member_subforms(
 
 	return cons(
 			list(child_res, name),
-			evaluate_member_subforms(env, composite, cdr(subfms)));
+			evaluate_member_subforms_recurse(
+				env, composite, cdr(subfms), scope));
+}
+
+Value* evaluate_member_subforms(Value* env, Value* composite, Value* subfms)
+{
+	Value* scope = list(symbol("scope"), 0);
+	env = cons(scope, env);
+	return evaluate_member_subforms_recurse(env, composite, subfms, scope);
 }
 
 Value* bind_composite_parameters(Value*& env, Value* parameters, int idx)
@@ -1341,7 +1363,7 @@ int main(int /*argc*/, char* /*argv*/[])
 	env = cons(list(symbol("binding"), symbol("__main__"), module), env);
 
 	Value* operator_ = evaluate_compiletime(env,
-			list(symbol("get"), symbol("__main__"), symbol("testui")));
+			list(symbol("@get"), symbol("__main__"), symbol("testui")));
 	Value* int_ = evaluate_type(env, symbol("int"));
 	Value* composite = evaluate_typefun_form(env, list(operator_, int_));
 	debug_print(composite);
