@@ -131,6 +131,12 @@ bool symbolp(Value* x)
 	return x->type == symbol_type;
 }
 
+const char* symbol_text(Value* symbol)
+{
+	assert(symbolp(symbol));
+	return ((Symbol*)symbol)->sym;
+}
+
 bool stringp(Value* x)
 {
 	return x->type == string_type;
@@ -1375,6 +1381,14 @@ Value* choose_struct_name(Value* type)
 	return symbol(buf);
 }
 
+Value* choose_member_name(Value* id)
+{
+	static int next_id = 1;
+	char buf[1024];
+	sprintf(buf, "member_%d", next_id++);
+	return symbol(buf);
+}
+
 Value* require_type(Value*& contents, Value* type);
 
 Value* generate_members_recurse(Value*& contents, Value* members)
@@ -1385,8 +1399,9 @@ Value* generate_members_recurse(Value*& contents, Value* members)
 	Value* content_tail = generate_members_recurse(contents, cdr(members));
 
 	Value* member = car(members);
-	Value* name = cadr(member);
+	Value* id = cadr(member);
 	Value* type = caddr(member);
+	Value* name = choose_member_name(id);
 
 	Value* type_name = require_type(contents, type);
 
@@ -1394,7 +1409,7 @@ Value* generate_members_recurse(Value*& contents, Value* members)
 	if (type_name == 0)
 		return content_tail;
 
-	return cons( list(type_name, name), content_tail);
+	return cons(list(id, type_name, name), content_tail);
 }
 
 Value* generate_members(Value*& contents, Value* members)
@@ -1467,6 +1482,63 @@ Value* require_type(Value*& contents, Value* type)
 	return name;
 }
 
+void write_struct_members_recurse(FILE* f, Value* members)
+{
+	if (members == 0)
+		return;
+
+	Value* member = car(members);
+	Value* type_name = cadr(member);
+	Value* name = caddr(member);
+
+	fprintf(f, "    %s %s;\n", symbol_text(type_name), symbol_text(name));
+
+	return write_struct_members_recurse(f, cdr(members));
+}
+
+void write_struct_members(FILE* f, Value* members)
+{
+	write_struct_members_recurse(f, members);
+}
+
+void write_struct(FILE* f, Value* struct_)
+{
+	assert(car(struct_) == symbol("struct"));
+	Value* name = cadr(struct_);
+	Value* members = caddr(struct_);
+
+	fprintf(f, "typedef struct tag_%s\n", symbol_text(name));
+	fprintf(f, "{\n");
+	write_struct_members(f, members);
+	fprintf(f, "} %s;\n\n", symbol_text(name));
+}
+
+void write_contents_recurse(FILE* f, Value* contents)
+{
+	if (contents == 0)
+		return;
+
+	write_contents_recurse(f, cdr(contents));
+
+	Value* entry = car(contents);
+
+	Value* entity = caddr(entry);
+
+	if (car(entity) == symbol("struct"))
+	{
+		write_struct(f, entity);
+	}
+	else
+	{
+		assert(0);
+	}
+}
+
+void write_contents(FILE* f, Value* contents)
+{
+	write_contents_recurse(f, contents);
+}
+
 int main(int /*argc*/, char* /*argv*/[])
 {
 	initialize_default_environment();
@@ -1492,6 +1564,8 @@ int main(int /*argc*/, char* /*argv*/[])
 
 	debug_print(contents);
 	puts("");
+
+	write_contents(stdout, contents);
 
 	return 0;
 }
