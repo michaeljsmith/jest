@@ -48,6 +48,11 @@ Value* _f = new Value(0);
 
 Value* default_env = 0;
 Value* int_ = _f;
+Value* frame = _f;
+Value* window = _f;
+Value* label = _f;
+Value* edit = _f;
+Value* horizontal = _f;
 
 Value* cons(Value* head, Value* tail)
 {
@@ -1260,7 +1265,8 @@ Value* evaluate_member_subforms(Value* env, Value* composite, Value* subfms)
 	return evaluate_member_subforms_recurse(env, composite, subfms, scope);
 }
 
-Value* bind_composite_parameters(Value*& env, Value* composite, Value* parameters, int idx)
+Value* bind_composite_parameters(
+		Value*& env, Value* composite, Value* parameters, int idx)
 {
 	if (parameters == 0)
 		return 0;
@@ -1280,8 +1286,8 @@ Value* bind_composite_parameters(Value*& env, Value* composite, Value* parameter
 	env = cons(list(symbol("binding"), name,
 				list(symbol("memberref"), composite, member)), env);
 
-	return cons(member,
-			bind_composite_parameters(env, composite, cdr(parameters), idx + 1));
+	return cons(member, bind_composite_parameters(
+				env, composite, cdr(parameters), idx + 1));
 }
 
 Value* evaluate_composite(
@@ -1354,6 +1360,11 @@ void initialize_default_environment()
 	register_type(default_env, "frame", "window", "window");
 
 	int_ = evaluate_type(default_env, symbol("int"));
+	frame = evaluate_type(default_env, symbol("frame"));
+	window = evaluate_type(default_env, symbol("window"));
+	label = evaluate_type(default_env, symbol("label"));
+	edit = evaluate_type(default_env, symbol("edit"));
+	horizontal = evaluate_type(default_env, symbol("horizontal"));
 }
 
 Value* choose_struct_name(Value* type)
@@ -1364,6 +1375,33 @@ Value* choose_struct_name(Value* type)
 	return symbol(buf);
 }
 
+Value* require_type(Value*& contents, Value* type);
+
+Value* generate_members_recurse(Value*& contents, Value* members)
+{
+	if (0 == members)
+		return 0;
+
+	Value* content_tail = generate_members_recurse(contents, cdr(members));
+
+	Value* member = car(members);
+	Value* name = cadr(member);
+	Value* type = caddr(member);
+
+	Value* type_name = require_type(contents, type);
+
+	assert(type_name != _f);
+	if (type_name == 0)
+		return content_tail;
+
+	return cons( list(type_name, name), content_tail);
+}
+
+Value* generate_members(Value*& contents, Value* members)
+{
+	return generate_members_recurse(contents, members);
+}
+
 Value* generate_struct(Value*& contents, Value* type)
 {
 	assert(car(type) == symbol("type"));
@@ -1371,7 +1409,10 @@ Value* generate_struct(Value*& contents, Value* type)
 	assert(car(composite) == symbol("composite"));
 
 	Value* name = choose_struct_name(type);
-	return list(name, list(symbol("struct"), name, list()));
+
+	Value* members = cadr(composite);
+	Value* member_content = generate_members(contents, members);
+	return list(name, list(symbol("struct"), name, member_content));
 }
 
 Value* lookup_contents_recurse(Value* contents, Value* name)
@@ -1393,8 +1434,24 @@ Value* lookup_contents(Value* contents, Value* name)
 
 Value* require_type(Value*& contents, Value* type)
 {
+	// Don't try to generate built-in types.
 	if (type == int_)
 		return symbol("int");
+	if (type == frame)
+		return symbol("frame");
+	if (type == window)
+		return symbol("window");
+	if (type == label)
+		return symbol("label");
+	if (type == edit)
+		return symbol("edit");
+	if (type == horizontal)
+		return symbol("horizontal");
+
+	// Don't try to generate argument reference types.
+	Value* type_data = cadddr(type);
+	if (consp(type_data) && car(type_data) == symbol("argument"))
+		return 0;
 
 	Value* entry = lookup_contents(contents, type);
 	if (entry == _f)
