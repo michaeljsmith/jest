@@ -47,6 +47,7 @@ struct String : public Value
 Value* _f = new Value(0);
 
 Value* default_env = 0;
+Value* int_ = _f;
 
 Value* cons(Value* head, Value* tail)
 {
@@ -1351,6 +1352,62 @@ void initialize_default_environment()
 	register_type(default_env, "edit", "window", "int");
 	register_type(default_env, "horizontal", "window", "window", "window");
 	register_type(default_env, "frame", "window", "window");
+
+	int_ = evaluate_type(default_env, symbol("int"));
+}
+
+Value* choose_struct_name(Value* type)
+{
+	static int next_id = 1;
+	char buf[1024];
+	sprintf(buf, "struct_%d", next_id++);
+	return symbol(buf);
+}
+
+Value* generate_struct(Value*& contents, Value* type)
+{
+	assert(car(type) == symbol("type"));
+	Value* composite = cadddr(type);
+	assert(car(composite) == symbol("composite"));
+
+	Value* name = choose_struct_name(type);
+	return list(name, list(symbol("struct"), name, list()));
+}
+
+Value* lookup_contents_recurse(Value* contents, Value* name)
+{
+	if (contents == 0)
+		return _f;
+
+	Value* top = car(contents);
+	if (car(top) == name)
+		return cdr(top);
+
+	return lookup_contents_recurse(cdr(contents), name);
+}
+
+Value* lookup_contents(Value* contents, Value* name)
+{
+	return lookup_contents_recurse(contents, name);
+}
+
+Value* require_type(Value*& contents, Value* type)
+{
+	if (type == int_)
+		return symbol("int");
+
+	Value* entry = lookup_contents(contents, type);
+	if (entry == _f)
+	{
+		entry = generate_struct(contents, type);
+		Value* name = car(entry);
+		Value* struct_ = cadr(entry);
+		contents = cons(list(type, name, struct_), contents);
+	}
+
+	Value* name = car(entry);
+
+	return name;
 }
 
 int main(int /*argc*/, char* /*argv*/[])
@@ -1369,9 +1426,14 @@ int main(int /*argc*/, char* /*argv*/[])
 
 	Value* operator_ = evaluate_compiletime(env,
 			list(symbol("@get"), symbol("__main__"), symbol("testui")));
-	Value* int_ = evaluate_type(env, symbol("int"));
 	Value* composite = evaluate_typefun_form(env, list(operator_, int_));
 	debug_print(composite);
+	puts("");
+
+	Value* contents = 0;
+	require_type(contents, composite);
+
+	debug_print(contents);
 	puts("");
 
 	return 0;
