@@ -1430,6 +1430,42 @@ Value* generate_struct(Value*& contents, Value* type)
 	return list(name, list(symbol("struct"), name, member_content));
 }
 
+Value* choose_method_name(Value* signature)
+{
+	assert(0);
+	return 0;
+}
+
+Value* generate_particle(Value*& contents, Value* composite,
+		Value* composite_path, Value* form)
+{
+	Value* operator_ = car(form);
+	Value* args = cdr(form);
+
+	// Look up the composite that matches this form.
+	Value* arg_types = map_car(args);
+
+	//Value* composite = evaluate_typefun_form(env, cons(operator_, arg_types));
+	assert(0);
+	//asfd;
+	return 0;
+}
+
+Value* generate_method(Value*& contents, Value* form)
+{
+	Value* operator_ = car(form);
+	Value* args = cdr(form);
+
+	Value* composite_type = car(args);
+	Value* args_tail = cdr(args);
+
+	Value* composite = cadddr(type);
+	assert(car(composite) == symbol("composite"));
+
+	// Recursively generate all the particles, starting with the root.
+	return generate_particle(contents, composite, 0, root_form);
+}
+
 Value* lookup_contents_recurse(Value* contents, Value* name)
 {
 	if (contents == 0)
@@ -1544,8 +1580,8 @@ int main(int /*argc*/, char* /*argv*/[])
 	initialize_default_environment();
 
 	Value* module_ast = parse_file("test/test2.jest");
-	debug_print(module_ast);
-	puts("");
+	//debug_print(module_ast);
+	//puts("");
 
 	Value* module = evaluate_module(module_ast);
 
@@ -1562,10 +1598,10 @@ int main(int /*argc*/, char* /*argv*/[])
 	Value* contents = 0;
 	require_type(contents, composite);
 
-	debug_print(contents);
-	puts("");
+	//debug_print(contents);
+	//puts("");
 
-	write_contents(stdout, contents);
+	//write_contents(stdout, contents);
 
 	return 0;
 }
