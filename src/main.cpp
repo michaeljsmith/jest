@@ -99,6 +99,11 @@ Value* list(Value* x0, Value* x1, Value* x2, Value* x3, Value* x4)
 	return cons(x0, list(x1, x2, x3, x4));
 }
 
+Value* list(Value* x0, Value* x1, Value* x2, Value* x3, Value* x4, Value* x5)
+{
+	return cons(x0, list(x1, x2, x3, x4, x5));
+}
+
 #include <map>
 #include <string>
 Value* symbol(char const* s)
@@ -1430,21 +1435,22 @@ Value* generate_struct(Value*& contents, Value* type)
 	return list(name, list(symbol("struct"), name, member_content));
 }
 
-Value* lookup_contents_recurse(Value* contents, Value* name)
+Value* lookup_type_recurse(Value* contents, Value* type)
 {
 	if (contents == 0)
 		return _f;
 
 	Value* top = car(contents);
-	if (car(top) == name)
+	Value* top_type = car(top);
+	if (car(top_type) == symbol("type") && top_type == type)
 		return cdr(top);
 
-	return lookup_contents_recurse(cdr(contents), name);
+	return lookup_type_recurse(cdr(contents), type);
 }
 
-Value* lookup_contents(Value* contents, Value* name)
+Value* lookup_type(Value* contents, Value* type)
 {
-	return lookup_contents_recurse(contents, name);
+	return lookup_type_recurse(contents, type);
 }
 
 Value* require_type(Value*& contents, Value* type)
@@ -1468,7 +1474,7 @@ Value* require_type(Value*& contents, Value* type)
 	if (consp(type_data) && car(type_data) == symbol("argument"))
 		return 0;
 
-	Value* entry = lookup_contents(contents, type);
+	Value* entry = lookup_type(contents, type);
 	if (entry == _f)
 	{
 		entry = generate_struct(contents, type);
@@ -1480,6 +1486,194 @@ Value* require_type(Value*& contents, Value* type)
 	Value* name = car(entry);
 
 	return name;
+}
+
+Value* generate_code_for_instance(
+		Value*& contents, Value* env,
+		Value* operator_, Value* instance);
+
+Value* get_instance_result_type(Value* instance)
+{
+	assert(consp(instance));
+	Value* type = car(instance);
+	Value* type_res = car(cadr(type));
+	return type_res;
+}
+
+Value* extract_primitive_parameter_types_recurse(Value* arguments)
+{
+	if (arguments == 0)
+		return 0;
+	return cons(
+			get_instance_result_type(car(arguments)),
+			extract_primitive_parameter_types_recurse(cdr(arguments)));
+}
+
+Value* find_typefun_code_recurse(Value* env, Value* scope,
+		Value* operator_, Value* primitive, Value* arguments)
+{
+	for (Value* cur = scope; cur; cur = cdr(cur))
+	{
+		Value* entry = car(cur);
+
+		if (car(entry) == symbol("module"))
+		{
+			Value* subres = find_typefun_code_recurse(env, cadr(entry),
+					operator_, primitive, arguments);
+			if (subres != _f)
+				return subres;
+		}
+		else if (car(entry) == symbol("scope"))
+		{
+			Value* subres = find_typefun_code_recurse(env, cadr(entry),
+					operator_, primitive, arguments);
+			if (subres != _f)
+				return subres;
+		}
+		else if (car(entry) == symbol("@typefun"))
+		{
+			if (operator_ != cadr(entry))
+				continue;
+
+			Value* match_res = match_parameter_type_list(
+					caddr(entry), list(primitive, arguments));
+			if (match_res != _f)
+			{
+				// TODO: Bind template parameters from match_res to
+				// environment.
+				//Value* parameters = caddr(entry);
+//				Value* type = evaluate_composite(
+//						env, format_composite_name(entry, cdr(form)),
+//						parameters, cadddr(entry), caddddr(entry));
+		//Value* env, Value* name, Value* parameters, Value* expr, Value* scope);
+//				return type;
+				assert(0);
+			}
+		}
+	}
+
+	return _f;
+}
+
+Value* find_typefun_code(Value* env, Value* operator_,
+		Value* primitive, Value* arguments)
+{
+	return find_typefun_code_recurse(
+			env, env, operator_, primitive, arguments);
+}
+
+Value* evaluate_typefun_expression_instance(Value* typefun_expr,
+		Value* template_bindings, Value* type_parameters, Value* arguments)
+{
+	asdf;
+}
+
+Value* choose_method_name(
+		Value* operator_, Value* primitive, Value* arguments)
+{
+	asdf;
+}
+
+Value* generate_method(Value*& contents, Value* env, Value* operator_,
+		Value* primitive, Value* arguments)
+{
+	assert(car(operator_) == symbol("operator"));
+	assert(car(primitive) == symbol("operator"));
+
+	Value* typefun_binding_pair = find_typefun_code(
+			env, operator_, primitive, arguments);
+	assert(typefun_binding_pair != _f);
+	Value* typefun = car(typefun_binding_pair);
+	Value* template_bindings = cdr(typefun_binding_pair);
+
+	Value* type_parameters = caddr(typefun);
+	Value* typefun_expr = cadddr(typefun);
+	//Value* typefun_scope = caddddr(typefun);
+
+	// Convert expression to instance.
+	Value* instance = evaluate_typefun_expression_instance(typefun_expr,
+			template_bindings, type_parameters, arguments);
+
+	// Generate the code for the instance.
+	Value* code = generate_code_for_instance(
+			contents, env, operator_, instance);
+
+	// Choose a name for the method.
+	Value* name = choose_method_name(operator_, primitive, arguments);
+
+	// Return the compiled method.
+	return list(name, list(symbol("method"), name,
+				operator_, primitive, arguments, code));
+}
+
+bool compare_argument_list(Value* l, Value* r);
+
+bool compare_instance(Value* l, Value* r)
+{
+	if (car(l) != car(r))
+		return false;
+	return compare_argument_list(cdr(l), cdr(r));
+}
+
+bool compare_argument_list(Value* l, Value* r)
+{
+	if (l == 0 && r == 0)
+		return true;
+	if (l == 0 || r == 0)
+		return false;
+	return compare_instance(car(l), car(r)) &&
+		compare_argument_list(cdr(l), cdr(r));
+}
+
+Value* lookup_method_recurse(Value* contents, Value* operator_,
+		Value* primitive, Value* arguments)
+{
+	if (contents == 0)
+		return _f;
+
+	Value* top = car(contents);
+	Value* method_type = car(top);
+	if (car(method_type) == symbol("method_type") &&
+			cadr(method_type) == operator_ &&
+			caddr(method_type) == primitive &&
+			compare_argument_list(cadddr(method_type), arguments))
+		return cdr(top);
+
+	return lookup_method_recurse(cdr(contents), operator_, primitive,
+			arguments);
+}
+
+Value* lookup_method(Value* contents, Value* operator_,
+		Value* primitive, Value* arguments)
+{
+	return lookup_method_recurse(contents, operator_, primitive, arguments);
+}
+
+Value* require_method(Value*& contents, Value* env, Value* operator_,
+		Value* primitive, Value* arguments)
+{
+	Value* entry = lookup_method(contents, operator_, primitive, arguments);
+	if (entry == _f)
+	{
+		entry = generate_method(
+				contents, env, operator_, primitive, arguments);
+		Value* name = car(entry);
+		Value* method = cadr(entry);
+		Value* method_spec = list(symbol("method_type"),
+				operator_, primitive, arguments);
+		contents = cons(list(method_spec, name, method), contents);
+	}
+
+	Value* name = car(entry);
+
+	return name;
+}
+
+Value* generate_code_for_instance(
+		Value*& contents, Value* env,
+		Value* operator_, Value* instance)
+{
+	asdf;
 }
 
 void write_struct_members_recurse(FILE* f, Value* members)
@@ -1544,8 +1738,8 @@ int main(int /*argc*/, char* /*argv*/[])
 	initialize_default_environment();
 
 	Value* module_ast = parse_file("test/test2.jest");
-	debug_print(module_ast);
-	puts("");
+	//debug_print(module_ast);
+	//puts("");
 
 	Value* module = evaluate_module(module_ast);
 
@@ -1556,14 +1750,14 @@ int main(int /*argc*/, char* /*argv*/[])
 	Value* operator_ = evaluate_compiletime(env,
 			list(symbol("@get"), symbol("__main__"), symbol("testui")));
 	Value* composite = evaluate_typefun_form(env, list(operator_, int_));
-	debug_print(composite);
-	puts("");
+	//debug_print(composite);
+	//puts("");
 
 	Value* contents = 0;
 	require_type(contents, composite);
 
-	debug_print(contents);
-	puts("");
+	//debug_print(contents);
+	//puts("");
 
 	write_contents(stdout, contents);
 
