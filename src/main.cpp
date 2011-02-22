@@ -1430,42 +1430,6 @@ Value* generate_struct(Value*& contents, Value* type)
 	return list(name, list(symbol("struct"), name, member_content));
 }
 
-Value* choose_method_name(Value* signature)
-{
-	assert(0);
-	return 0;
-}
-
-Value* generate_particle(Value*& contents, Value* composite,
-		Value* composite_path, Value* form)
-{
-	Value* operator_ = car(form);
-	Value* args = cdr(form);
-
-	// Look up the composite that matches this form.
-	Value* arg_types = map_car(args);
-
-	//Value* composite = evaluate_typefun_form(env, cons(operator_, arg_types));
-	assert(0);
-	//asfd;
-	return 0;
-}
-
-Value* generate_method(Value*& contents, Value* form)
-{
-	Value* operator_ = car(form);
-	Value* args = cdr(form);
-
-	Value* composite_type = car(args);
-	Value* args_tail = cdr(args);
-
-	Value* composite = cadddr(type);
-	assert(car(composite) == symbol("composite"));
-
-	// Recursively generate all the particles, starting with the root.
-	return generate_particle(contents, composite, 0, root_form);
-}
-
 Value* lookup_contents_recurse(Value* contents, Value* name)
 {
 	if (contents == 0)
@@ -1516,6 +1480,109 @@ Value* require_type(Value*& contents, Value* type)
 	Value* name = car(entry);
 
 	return name;
+}
+
+Value* find_typefun_code_recurse(Value* env, Value* scope, Value* form)
+{
+	for (Value* cur = scope; cur; cur = cdr(cur))
+	{
+		Value* entry = car(cur);
+
+		if (car(entry) == symbol("module"))
+		{
+			Value* subres = find_typefun_code_recurse(env, cadr(entry), form);
+			if (subres != _f)
+				return subres;
+		}
+		else if (car(entry) == symbol("scope"))
+		{
+			Value* subres = find_typefun_code_recurse(env, cadr(entry), form);
+			if (subres != _f)
+				return subres;
+		}
+		else if (car(entry) == symbol("@typefun"))
+		{
+			if (car(form) != cadr(entry))
+				continue;
+
+			Value* match_res = match_parameter_type_list(
+					caddr(entry), cdr(form));
+			if (match_res != _f)
+			{
+				// TODO: Bind template parameters from match_res to
+				// environment.
+				//Value* parameters = caddr(entry);
+//				Value* type = evaluate_composite(
+//						env, format_composite_name(entry, cdr(form)),
+//						parameters, cadddr(entry), caddddr(entry));
+		//Value* env, Value* name, Value* parameters, Value* expr, Value* scope);
+//				return type;
+				assert(0);
+			}
+		}
+	}
+
+	return _f;
+}
+
+Value* generate_code(Value*& contents, Value* env, Value* context,
+		Value* expression);
+
+Value* bind_method_typefun_code_parameters_recurse(Value* bindings)
+{
+}
+
+Value* lookup_method_typefun_binding_recurse(Value* name, Value* bindings)
+{
+	assert(0);
+}
+
+Value* determine_method_typefun_params_recurse(
+		Value* type_bindings, Value* parameters)
+{
+	if (parameters == 0)
+		return 0;
+
+	return cons(
+			parameter,
+			determine_method_typefun_params_recurse(type_bindings,
+				cdr(parameters)));
+}
+
+Value* generate_method(Value*& contents, Value* env, Value* operator_,
+		Value* primitive, Value* types)
+{
+	assert(listp(expression));
+	assert(symbolp(car(expression)));
+
+	Value* form = cons(operator_, cons(primitive, expression));
+	Value* typefun_binding_pair = find_typefun_code_recurse(env, env, form);
+	assert(typefun_binding_pair != _f);
+
+	Value* typefun = car(typefun_binding_pair);
+	Value* template_bindings = cdr(typefun_binding_pair);
+
+	Value* parameters = caddr(entry);
+	Value* typefun_expr = cadddr(entry);
+	Value* typefun_scope = caddddr(entry);
+
+	// Add parameter references to context.
+
+	// Evaluate code for expression.
+	//Value* code = generate_code(contents, env, typefun_expr);
+	assert(0);
+}
+
+Value* require_method(Value*& contents, Value* env, Value* operator_,
+		Value* primitive, Value* types)
+{
+	assert(0);
+}
+
+Value* generate_code(Value*& contents, Value* env, Value* context,
+		Value* expression)
+{
+	assert(0);
 }
 
 void write_struct_members_recurse(FILE* f, Value* members)
@@ -1592,8 +1659,8 @@ int main(int /*argc*/, char* /*argv*/[])
 	Value* operator_ = evaluate_compiletime(env,
 			list(symbol("@get"), symbol("__main__"), symbol("testui")));
 	Value* composite = evaluate_typefun_form(env, list(operator_, int_));
-	debug_print(composite);
-	puts("");
+	//debug_print(composite);
+	//puts("");
 
 	Value* contents = 0;
 	require_type(contents, composite);
@@ -1601,7 +1668,9 @@ int main(int /*argc*/, char* /*argv*/[])
 	//debug_print(contents);
 	//puts("");
 
-	//write_contents(stdout, contents);
+	write_contents(stdout, contents);
 
 	return 0;
 }
+
+Current problem seems to be that types in typefuns are immediately evaluated - how will this work with template parameters? Probably needs to be a symbol reference.
