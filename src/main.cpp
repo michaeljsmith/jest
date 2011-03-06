@@ -10,6 +10,8 @@ struct Value
 	void const* type;
 };
 
+Value* nil = 0;
+
 char const* cell_type = "cell";
 struct Cell : public Value
 {
@@ -253,6 +255,13 @@ void set_car(Value* c, Value* x)
 	((Cell*)c)->head = x;
 }
 
+Value* append(Value* l, Value* r)
+{
+	if (l == nil)
+		return r;
+	return cons(car(l), append(cdr(l), r));
+}
+
 Value* reverse_helper(Value* l, Value* x)
 {
 	if (0 == l)
@@ -266,8 +275,222 @@ Value* reverse(Value* x)
 	return reverse_helper(x, 0);
 }
 
-int main(int /*argc*/, char* /*argv*/)
+Value* f()
+{
+	return nil;
+}
+
+Value* literal(char const* s)
+{
+	return symbol(s);
+}
+
+Value* literal(Value* x)
+{
+	return x;
+}
+
+template <typename X0> Value* f(X0 x0)
+{
+	return cons(literal(x0), f());
+}
+
+template <typename X0, typename X1> Value* f(X0 x0, X1 x1)
+{
+	return cons(literal(x0), f(x1));
+}
+
+Value* lookup_define_recurse(Value* env, Value* sym, Value* entries)
+{
+	if (env == nil)
+		return _f;
+
+	assert(listp(entries));
+
+	Value* entry = car(entries);
+	if (car(entry) == symbol("define"))
+	{
+		if (sym == cadr(entry))
+			return caddr(entry);
+	}
+	else if (car(entry) == symbol("module"))
+	{
+		Value* subenv = cadr(entry);
+		Value* res = lookup_define_recurse(env, sym, subenv);
+		if (res != _f)
+			return res;
+	}
+
+	return lookup_define_recurse(env, sym, cdr(entries));
+}
+
+Value* lookup_define(Value* env, Value* symbol)
+{
+	return lookup_define_recurse(env, symbol, env);
+}
+
+Value* match_pattern(Value* pattern, Value* expr)
+{
+	if (symbolp(pattern))
+		return pattern == expr ? nil : _f;
+
+	if (nil == pattern)
+		return expr == nil ? nil : _f;
+
+	assert(consp(pattern));
+
+	Value* head_matches = _f;
+	if (symbol("unquote") == car(pattern))
+	{
+		assert(symbolp(cadr(pattern)));
+		assert(nil == cddr(pattern));
+		return list(list(cadr(pattern), expr));
+	}
+	else
+	{
+		if (!consp(expr))
+			return _f;
+		head_matches = match_pattern(car(pattern), car(expr));
+	}
+
+	if (head_matches == _f)
+		return _f;
+
+	Value* tail_matches = _f;
+	if (listp(cdr(pattern)))
+	{
+		tail_matches = match_pattern(cdr(pattern), cdr(expr));
+	}
+	else
+	{
+		assert(consp(cdr(pattern)));
+		assert(symbol("unquote") == car(cdr(pattern)));
+		Value* sym = cadr(cdr(pattern));
+		tail_matches = list(list(sym, cdr(expr)));
+	}
+
+	if (head_matches == _f || tail_matches == _f)
+		return _f;
+
+	return append(head_matches, tail_matches);
+}
+
+Value* find_pattern_match_recurse(Value* env, Value* expr, Value* entries)
+{
+	if (env == nil)
+		return _f;
+
+	assert(listp(entries));
+
+	Value* entry = car(entries);
+	if (car(entry) == symbol("rule"))
+	{
+		Value* rule = cadr(entry);
+		Value* ptn = car(rule);
+		Value* matches = match_pattern(ptn, expr);
+		if (matches != _f)
+			return list(matches, rule);
+	}
+	else if (car(entry) == symbol("module"))
+	{
+		Value* subenv = cadr(entry);
+		Value* res = find_pattern_match_recurse(env, expr, subenv);
+		if (res != _f)
+			return res;
+	}
+	return find_pattern_match_recurse(env, expr, cdr(entries));
+}
+
+Value* find_pattern_match(Value* env, Value* expr)
+{
+	return find_pattern_match_recurse(env, expr, env);
+}
+
+Value* evaluate(Value* env, Value* expr);
+
+Value* evaluate_list_recurse(Value* env, Value* form)
+{
+	if (nil == form)
+		return nil;
+	return cons(evaluate(env, car(form)), evaluate_list_recurse(env, cdr(form)));
+}
+
+Value* evaluate_list(Value* env, Value* form)
+{
+	Value* scope = new Cell(symbol("module"), new Cell(nil, nil));
+	Value* new_env = new Cell(scope, env);
+	return evaluate_list_recurse(new_env, form);
+}
+
+Value* bind_matches(Value* env, Value* matches)
+{
+	if (matches == nil)
+		return env;
+	Value* sym = car(car(matches));
+	Value* val = cadr(car(matches));
+	return cons(list(symbol("define"), sym, val),
+			bind_matches(env, cdr(matches)));
+}
+
+Value* evaluate_pattern(Value* env, Value* form)
+{
+	assert(form != nil);
+
+	Value* evalfm = evaluate_list(env, form);
+	Value* srch_res = find_pattern_match(env, evalfm);
+	assert(srch_res != _f);
+	if (srch_res == _f)
+		return _f;
+
+	Value* matches = car(srch_res);
+	Value* rule = cadr(srch_res);
+	Value* expr = cadr(rule);
+	Value* rule_env = caddr(rule);
+
+	Value* new_env = bind_matches(rule_env, matches);
+	return evaluate(new_env, expr);
+}
+
+void push_scope(Value* entry, Value* env)
+{
+	assert(symbol("module") == car(car(env)));
+
+	set_car(new Cell(entry, cdr(car(env))), cdr(car(env)));
+}
+
+Value* evaluate(Value* env, Value* expr)
+{
+	if (stringp(expr))
+		return expr;
+
+	if (symbolp(expr))
+		return lookup_define(env, expr);
+
+	if (listp(expr))
+	{
+		if (expr != nil && car(expr) == symbol("quote"))
+		{
+			assert(cdr(expr) != nil);
+			assert(cddr(expr) == nil);
+			return cadr(expr);
+		}
+
+		if (expr != nil && car(expr) == symbol("define"))
+		{
+			Value* ptn = cadr(expr);
+			Value* rule_expr = caddr(expr);
+			assert(cdddr(expr) == nil);
+			push_scope(list(symbol("rule"), list(ptn, rule_expr, env)), env);
+		}
+
+		return evaluate_pattern(env, expr);
+	}
+
+	assert(0);
+	return _f;
+}
+
+int main(int /*argc*/, char* /*argv*/[])
 {
 	return 0;
 }
-
