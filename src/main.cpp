@@ -408,11 +408,19 @@ Value* find_pattern_match(Value* env, Value* expr)
 
 Value* evaluate(Value* env, Value* expr);
 
-Value* evaluate_list_recurse(Value* env, Value* form)
+Value* evaluate_list_recurse(Value* env, Value* list)
 {
-	if (nil == form)
+	if (nil == list)
 		return nil;
-	return cons(evaluate(env, car(form)), evaluate_list_recurse(env, cdr(form)));
+
+	assert(consp(list));
+
+	// Check whether we need to splice the child list into the parent list.
+	if (consp(car(list)) && symbol("unquote-splicing") == car(car(list)))
+		return append(evaluate(env, cadr(car(list))),
+				evaluate_list_recurse(env, cdr(list)));
+	else
+		return cons(evaluate(env, car(list)), evaluate_list_recurse(env, cdr(list)));
 }
 
 Value* evaluate_list(Value* env, Value* form)
