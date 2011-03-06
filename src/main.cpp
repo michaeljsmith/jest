@@ -477,6 +477,14 @@ Value* evaluate(Value* env, Value* expr)
 
 		if (expr != nil && car(expr) == symbol("define"))
 		{
+			Value* sym = cadr(expr);
+			Value* val_expr = caddr(expr);
+			Value* val = evaluate(env, val_expr);
+			push_scope(list(symbol("define"), sym, val), env);
+		}
+
+		if (expr != nil && car(expr) == symbol("rule"))
+		{
 			Value* ptn = cadr(expr);
 			Value* rule_expr = caddr(expr);
 			assert(cdddr(expr) == nil);
