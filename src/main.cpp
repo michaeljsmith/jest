@@ -644,6 +644,7 @@ Value* evaluate(Value* env, Value* expr)
 	return _f;
 }
 
+// TODO: Needs dynamic scope??
 //(rule (map ,operator (,head . ,tail))
 // `(,(operator head) . ,(map operator tail)))
 //(rule (map ,operator ())
@@ -652,7 +653,10 @@ Value* evaluate(Value* env, Value* expr)
 //(rule (code ,operator ,list)
 // (rule (arg-code ,arg)
 //  (code ,operator ,arg))
-// (map arg-code list))
+// (,@map arg-code list))
+
+//(rule (method ,operator ,args ,expr)
+// (
 
 int main(int /*argc*/, char* /*argv*/[])
 {
