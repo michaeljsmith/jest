@@ -275,11 +275,6 @@ Value* reverse(Value* x)
 	return reverse_helper(x, 0);
 }
 
-Value* f()
-{
-	return nil;
-}
-
 Value* literal(char const* s)
 {
 	return symbol(s);
@@ -288,6 +283,11 @@ Value* literal(char const* s)
 Value* literal(Value* x)
 {
 	return x;
+}
+
+Value* f()
+{
+	return nil;
 }
 
 template <typename X0> Value* f(X0 x0)
@@ -425,6 +425,8 @@ Value* evaluate_list_recurse(Value* env, Value* list)
 
 Value* evaluate_list(Value* env, Value* form)
 {
+	// Directly construct Cell instances, so that we don't wind up with a
+	// shared instance (which would happen if we used cons()).
 	Value* scope = new Cell(symbol("module"), new Cell(nil, nil));
 	Value* new_env = new Cell(scope, env);
 	return evaluate_list_recurse(new_env, form);
@@ -466,6 +468,37 @@ void push_scope(Value* entry, Value* env)
 	set_car(new Cell(entry, cdr(car(env))), cdr(car(env)));
 }
 
+Value* compile_pattern(Value* env, Value* ptn);
+
+Value* compile_pattern_list(Value* env, Value* ptn)
+{
+	if (ptn == nil)
+		return nil;
+
+	if (!consp(ptn))
+		return compile_pattern(env, ptn);
+
+	return cons(compile_pattern(env, car(ptn)),
+			compile_pattern_list(env, cdr(ptn)));
+}
+
+Value* compile_pattern(Value* env, Value* ptn)
+{
+	assert(ptn != nil);
+
+	if (consp(ptn))
+	{
+		if (symbol("unquote") == car(ptn))
+			return ptn;
+		return compile_pattern_list(env, ptn);
+	}
+
+	if (symbolp(ptn))
+		return evaluate(env, ptn);
+
+	return ptn;
+}
+
 Value* evaluate(Value* env, Value* expr)
 {
 	if (stringp(expr))
@@ -493,7 +526,7 @@ Value* evaluate(Value* env, Value* expr)
 
 		if (expr != nil && car(expr) == symbol("rule"))
 		{
-			Value* ptn = cadr(expr);
+			Value* ptn = compile_pattern(env, cadr(expr));
 			Value* rule_expr = caddr(expr);
 			assert(cdddr(expr) == nil);
 			push_scope(list(symbol("rule"), list(ptn, rule_expr, env)), env);
