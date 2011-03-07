@@ -300,6 +300,26 @@ template <typename X0, typename X1> Value* f(X0 x0, X1 x1)
 	return cons(literal(x0), f(x1));
 }
 
+Value* q(Value* expr)
+{
+	return list(symbol("quote"), expr);
+}
+
+Value* qq(Value* expr)
+{
+	return list(symbol("quasiquote"), expr);
+}
+
+Value* uq(Value* expr)
+{
+	return list(symbol("unquote"), expr);
+}
+
+Value* uqs(Value* expr)
+{
+	return list(symbol("unquote-splicing"), expr);
+}
+
 Value* lookup_define_recurse(Value* env, Value* sym, Value* entries)
 {
 	if (env == nil)
@@ -488,6 +508,39 @@ Value* compile_pattern(Value* env, Value* ptn)
 	return ptn;
 }
 
+Value* evaluate_quasiquote(Value* env, Value* expr);
+
+Value* evaluate_quasiquote_list(Value* env, Value* list)
+{
+	if (nil == list)
+		return nil;
+
+	// Check whether this element is an unquote-splicing.
+	if (consp(car(list)) && symbol("unquote-splicing") == car(car(list)))
+	{
+		Value* res = evaluate(env, car(list));
+		assert(listp(res));
+		return append(res, evaluate_quasiquote_list(env, cdr(list)));
+	}
+
+	return cons(evaluate_quasiquote(env, car(list)),
+			evaluate_quasiquote_list(env, cdr(list)));
+}
+
+Value* evaluate_quasiquote(Value* env, Value* expr)
+{
+	if (!listp(expr))
+		return expr;
+
+	if (consp(expr) && symbol("unquote") == car(expr))
+	{
+		Value* unquote_expr = cadr(expr);
+		return evaluate(env, unquote_expr);
+	}
+
+	return expr;
+}
+
 Value* evaluate(Value* env, Value* expr)
 {
 	if (stringp(expr))
@@ -504,6 +557,13 @@ Value* evaluate(Value* env, Value* expr)
 			assert(cdr(expr) != nil);
 			assert(cddr(expr) == nil);
 			return cadr(expr);
+		}
+
+		// Evaluate quasi-quoted expressions.
+		if (expr != nil && car(expr) == symbol("quasiquote"))
+		{
+			Value* quote_expr = cadr(expr);
+			return evaluate_quasiquote(env, quote_expr);
 		}
 
 		// Evaluate symbol bindings.
