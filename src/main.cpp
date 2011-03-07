@@ -308,17 +308,10 @@ Value* lookup_define_recurse(Value* env, Value* sym, Value* entries)
 	assert(listp(entries));
 
 	Value* entry = car(entries);
-	if (car(entry) == symbol("define"))
+	if (car(entry) == symbol("bind"))
 	{
 		if (sym == cadr(entry))
 			return caddr(entry);
-	}
-	else if (car(entry) == symbol("module"))
-	{
-		Value* subenv = cadr(entry);
-		Value* res = lookup_define_recurse(env, sym, subenv);
-		if (res != _f)
-			return res;
 	}
 
 	return lookup_define_recurse(env, sym, cdr(entries));
@@ -393,7 +386,7 @@ Value* find_pattern_match_recurse(Value* env, Value* expr, Value* entries)
 	}
 	else if (car(entry) == symbol("module"))
 	{
-		Value* subenv = cadr(entry);
+		Value* subenv = caddr(entry);
 		Value* res = find_pattern_match_recurse(env, expr, subenv);
 		if (res != _f)
 			return res;
@@ -425,11 +418,7 @@ Value* evaluate_list_recurse(Value* env, Value* list)
 
 Value* evaluate_list(Value* env, Value* form)
 {
-	// Directly construct Cell instances, so that we don't wind up with a
-	// shared instance (which would happen if we used cons()).
-	Value* scope = new Cell(symbol("module"), new Cell(nil, nil));
-	Value* new_env = new Cell(scope, env);
-	return evaluate_list_recurse(new_env, form);
+	return evaluate_list_recurse(env, form);
 }
 
 Value* bind_matches(Value* env, Value* matches)
@@ -438,7 +427,7 @@ Value* bind_matches(Value* env, Value* matches)
 		return env;
 	Value* sym = car(car(matches));
 	Value* val = cadr(car(matches));
-	return cons(list(symbol("define"), sym, val),
+	return cons(list(symbol("bind"), sym, val),
 			bind_matches(env, cdr(matches)));
 }
 
@@ -465,7 +454,7 @@ void push_scope(Value* entry, Value* env)
 {
 	assert(symbol("module") == car(car(env)));
 
-	set_car(new Cell(entry, cdr(car(env))), cdr(car(env)));
+	set_car(cddr(car(env)), new Cell(entry, caddr(car(env))));
 }
 
 Value* compile_pattern(Value* env, Value* ptn);
@@ -509,6 +498,7 @@ Value* evaluate(Value* env, Value* expr)
 
 	if (listp(expr))
 	{
+		// Evaluate quoted expressions.
 		if (expr != nil && car(expr) == symbol("quote"))
 		{
 			assert(cdr(expr) != nil);
@@ -516,23 +506,65 @@ Value* evaluate(Value* env, Value* expr)
 			return cadr(expr);
 		}
 
-		if (expr != nil && car(expr) == symbol("define"))
+		// Evaluate symbol bindings.
+		if (expr != nil && car(expr) == symbol("bind"))
 		{
 			Value* sym = cadr(expr);
 			Value* val_expr = caddr(expr);
 			Value* val = evaluate(env, val_expr);
-			push_scope(list(symbol("define"), sym, val), env);
+			push_scope(list(symbol("bind"), sym, val), env);
+			return nil;
 		}
 
+		// Evaluate rule definitions.
 		if (expr != nil && car(expr) == symbol("rule"))
 		{
 			Value* ptn = compile_pattern(env, cadr(expr));
 			Value* rule_expr = caddr(expr);
 			assert(cdddr(expr) == nil);
 			push_scope(list(symbol("rule"), list(ptn, rule_expr, env)), env);
+			return nil;
 		}
 
-		return evaluate_pattern(env, expr);
+		// Evaluate module member references.
+		if (expr != nil && car(expr) == symbol(".mod"))
+		{
+			Value* mod_name = cadr(expr);
+			Value* member = caddr(expr);
+
+			Value* mod = lookup_define(env, mod_name);
+			Value* contents = caddr(mod);
+			return lookup_define(contents, member);
+		}
+
+		// Directly construct Cell instances, so that we don't wind up with a
+		// shared instance (which would happen if we used cons()).
+		Value* scope = new Cell(symbol("module"),
+				new Cell(nil, new Cell(nil, nil)));
+		Value* new_env = new Cell(scope, env);
+
+		if (expr != nil && car(expr) == symbol("module"))
+		{
+			Value* mod_name = cadr(expr);
+			set_car(cdr(scope), mod_name);
+			evaluate_list(new_env, caddr(expr));
+
+			// Grab the scope at the top of the stack - all the sub-defines
+			// and rules have been added to it. This will now be the module
+			// object.
+			Value* mod = car(new_env);
+
+			// Add the module to the scope, so that rules will automatically
+			// be used.
+			push_scope(mod, env);
+
+			// Add the module as a define, so it can be accessed via name.
+			push_scope(list(symbol("bind"), mod_name, mod), env);
+
+			return mod;
+		}
+
+		return evaluate_pattern(new_env, expr);
 	}
 
 	assert(0);
