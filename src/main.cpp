@@ -541,6 +541,18 @@ Value* evaluate_quasiquote(Value* env, Value* expr)
 	return expr;
 }
 
+void define_implicit_operator(Value* env, Value* ptn)
+{
+	// Check whether there is an undefined operator referenced as the first
+	// element of the pattern - if so, define it implicitly, as a convenence.
+	if (consp(ptn) && symbolp(car(ptn)))
+	{
+		Value* sym = car(ptn);
+		push_scope(list(symbol("bind"), sym,
+					list(symbol("operator"), sym, gensym())), env);
+	}
+}
+
 Value* evaluate(Value* env, Value* expr)
 {
 	if (stringp(expr))
@@ -579,6 +591,7 @@ Value* evaluate(Value* env, Value* expr)
 		// Evaluate rule definitions.
 		if (expr != nil && car(expr) == symbol("rule"))
 		{
+			define_implicit_operator(env, cadr(expr));
 			Value* ptn = compile_pattern(env, cadr(expr));
 			Value* rule_expr = caddr(expr);
 			assert(cdddr(expr) == nil);
@@ -630,6 +643,16 @@ Value* evaluate(Value* env, Value* expr)
 	assert(0);
 	return _f;
 }
+
+//(rule (map ,operator (,head . ,tail))
+// `(,(operator head) . ,(map operator tail)))
+//(rule (map ,operator ())
+// '())
+
+//(rule (code ,operator ,list)
+// (rule (arg-code ,arg)
+//  (code ,operator ,arg))
+// (map arg-code list))
 
 int main(int /*argc*/, char* /*argv*/[])
 {
