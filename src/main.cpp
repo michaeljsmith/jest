@@ -644,19 +644,30 @@ Value* evaluate(Value* env, Value* expr)
 	return _f;
 }
 
-// TODO: Needs dynamic scope??
+//(rule (list . ,args)
+// args)
+
 //(rule (map ,operator (,head . ,tail))
-// `(,(operator head) . ,(map operator tail)))
+// `((,operator ,head) . ,(map operator tail)))
 //(rule (map ,operator ())
 // '())
 
-//(rule (code ,operator ,list)
+//(rule (code-expr ,operator (,primitive . ,args))
 // (rule (arg-code ,arg)
-//  (code ,operator ,arg))
-// (,@map arg-code list))
+//  (code-expr operator arg))
+// `(code ,operator (,primitive ,@(list ,@(map 'arg-code args)))))
 
-//(rule (method ,operator ,args ,expr)
-// (
+//(rule (arg-binding-forms ())
+// '())
+//(rule (arg-binding-forms ((,arg-name ,arg-expr) . ,args-tail))
+// '((bind ,arg-name ,arg-expr) . ,(arg-binding-forms args-tail)))
+//
+//(rule (method ,operator ,type-name ,args ,expr)
+// `(method
+//   ,(generate-method-name operator type-name args)
+//   ,args
+//   ,(,@(arg-binding-forms args)
+//     ,@(code-expr operator expr))))
 
 int main(int /*argc*/, char* /*argv*/[])
 {
