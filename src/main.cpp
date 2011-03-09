@@ -669,6 +669,21 @@ Value* evaluate(Value* env, Value* expr)
 //   ,(,@(arg-binding-forms args)
 //     ,@(code-expr operator expr))))
 
+//***************************************************************************
+//// Declaration:
+//(define (ui (string x0))
+// (form
+//  (label x0)
+//  (field x0)))
+//
+//// Transformed to:
+//(rule (ui string)
+// (composite ((string x0))
+//  (form
+//   (label x0)
+//   (field x0))))
+//***************************************************************************
+
 int main(int /*argc*/, char* /*argv*/[])
 {
 	return 0;
