@@ -1,0 +1,54 @@
+#(define (ui (string name))
+#  (form
+#	(label name)
+#	(field name)))
+#
+#(define (run-instance (window frame))
+#  (create-window frame)
+#  (show-window frame)
+#  (run-window frame)
+#  (hide-window frame)
+#  (destroy-window frame))
+#
+#(define (frame (string title) (window contents))
+#  (primitive))
+#
+#(define (create-window ((frame string window) frame))
+#  (platform-create-frame (get (member frame title)))
+#  (create-window (get (member frame contents))))
+
+(define (ui (string name))
+  (form
+	(label name)
+	(field name)))
+
+(define (print ((form text-widget text-widget) form))
+  (print "begin form\n")
+  (print (get (member form first)))
+  (print (get (member form second)))
+  (print "end form\n"))
+
+(define (print ((label string) label))
+  (print (get (member label text))))
+
+(define (print ((field string) field))
+  (print "[")
+  (print (get (member field text)))
+  (print "]\n"))
+
+()
+
+(define (evaluate-jest expression)
+  (define safe-expression
+	(define-jest define)
+	(create-safe-symbols expression))
+
+  #(syntax (define-jest ,symbol ,expression))
+
+  (syntax (define-jest (,operator . ,args) ,expression)
+	,(scope
+	   (define (compile-arg (,type ,name)) (,type))
+	   (define arg-types ,map('compile-arg args))
+	   `(define ,(cons operator (map car args))
+		  (type ,@args
+				,expression))))
