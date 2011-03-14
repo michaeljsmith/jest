@@ -532,6 +532,9 @@ Value* evaluate_quasiquote(Value* env, Value* expr)
 	if (!listp(expr))
 		return expr;
 
+        // TODO: Handle nested quasiquote.
+        assert(!consp(expr) || symbol("quasiquote") != car(expr));
+
 	if (consp(expr) && symbol("unquote") == car(expr))
 	{
 		Value* unquote_expr = cadr(expr);

@@ -39,16 +39,35 @@
 ()
 
 (define (evaluate-jest expression)
+  (define namespace (gensym))
   (define safe-expression
-	(define-jest define)
-	(create-safe-symbols expression))
+    (morph namespace expression))
+  (define define-jest (morph namespace 'define))
 
-  #(syntax (define-jest ,symbol ,expression))
+  (define (method ('operator . 'args))
+    ,(cons operator (map instance-type args)))
 
-  (syntax (define-jest (,operator . ,args) ,expression)
+  (syntax ('operator . 'args)
+    (call (method (operator . args)) args))
+
+  (syntax (define-raw 'pattern 'expression)
+    (define pattern expression))
+
+  (syntax (,define-jest ('operator . 'args) 'expression)
 	,(scope
-	   (define (compile-arg (,type ,name)) (,type))
-	   (define arg-types ,map('compile-arg args))
-	   `(define ,(cons operator (map car args))
-		  (type ,@args
-				,expression))))
+	   (define (compile-arg ('type 'name)) ('type))
+	   (define arg-types (map compile-arg args))
+	   `(define (eval-type (',operator . ',arg-types))
+		  `(type ,@,@args
+				,,expression))))
+
+  (syntax (eval-type ('operator ('head . 'args)))
+
+#  (syntax (eval-type ('operator 'expression))
+#    (define (weave 'expr)
+#      (list operator expr))
+#    (define (weave ('head . 'tail))
+#      (list operator (cons head (map weave tail))))
+#    (weave expression))
+
+  ,safe-expression)
