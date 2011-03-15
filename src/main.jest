@@ -46,11 +46,21 @@
   (define define-jest (morph namespace define))
 
   (syntax (,define-jest ('operator . 'args) 'expression)
-    (define (composite ,operator ,@(map car args))
-      (lambda (operator ,@(map cadr args))
-        (eval-jest (,operator ,expression)))))
+    (syntax (jest-evaluator (,operator ,@(map car args)))
+      (lambda (map cadr args)
+        (eval-jest ,expression)))
+
+    (define (composite ,operator ,(map car args))
+      (lambda (function-name ,@(map cadr args))
+        (eval-jest (,function-name ,expression)))))
+
+  (syntax (jest-evaluator (,function-name (,operator . ,args)))
+    (lambda args
+      (eval-jest
+        ((composite operator (map instance-type args)) ,@args))))
 
   (syntax (eval-jest ('operator . 'args))
+    ((jest-evaluator ,`(operator ,@(map instance-type args))) args))
 
   ,safe-expression)
 
