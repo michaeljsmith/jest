@@ -63,20 +63,3 @@
     ((jest-evaluator ,`(operator ,@(map instance-type args))) args))
 
   ,safe-expression)
-
-#  (syntax (,define-jest ('operator . 'args) 'expression)
-#	,(scope
-#	   (define (compile-arg ('type 'name)) ('type))
-#	   (define arg-types (map compile-arg args))
-#	   `(define (eval-type (',operator . ',arg-types))
-#		  `(type ,@,@args
-#				,,expression))))
-
-#  (syntax (eval-type ('operator ('head . 'args)))
-
-#  (syntax (eval-type ('operator 'expression))
-#    (define (weave 'expr)
-#      (list operator expr))
-#    (define (weave ('head . 'tail))
-#      (list operator (cons head (map weave tail))))
-#    (weave expression))

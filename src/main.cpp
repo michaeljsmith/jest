@@ -1,3 +1,8 @@
+// TODO: Detach scope from rules - scope must be passed into rule evaluation to
+// allow immutable cells.
+// TODO: Propagate rules from expired child scopes.
+// TODO: Garbage collect scopes.
+
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
