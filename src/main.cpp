@@ -2,6 +2,7 @@
 // allow immutable cells.
 // TODO: Propagate rules from expired child scopes.
 // TODO: Garbage collect scopes.
+// TODO: Replace std::map with c implementation.
 
 #include <stdio.h>
 #include <assert.h>
