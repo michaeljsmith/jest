@@ -322,6 +322,8 @@ Value* uqs(Value* expr)
 
 Value* find_and_apply_fun(Value* env, Value* operator_, Value* args)
 {
+	// Note: in addition to the main env, we need to search the partial envs
+	// of all the operators.
 }
 
 Value* evaluate_form(Value* env, Value* operator_, Value* arg_exprs)
