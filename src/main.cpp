@@ -1,9 +1,3 @@
-// TODO: Detach scope from rules - scope must be passed into rule evaluation to
-// allow immutable cells.
-// TODO: Propagate rules from expired child scopes.
-// TODO: Garbage collect scopes.
-// TODO: Replace std::map with c implementation.
-
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
@@ -326,374 +320,87 @@ Value* uqs(Value* expr)
 	return list(symbol("unquote-splicing"), expr);
 }
 
-Value* lookup_define_recurse(Value* env, Value* sym, Value* entries)
+Value* find_and_apply_fun(Value* env, Value* operator_, Value* args)
 {
-	if (env == nil)
-		return _f;
+}
 
-	assert(listp(entries));
+Value* evaluate_form(Value* env, Value* operator_, Value* arg_exprs)
+{
+	// Evaluate the args in a subscope.
+	Value* args = evaluate_form_args(env, arg_exprs);
 
-	Value* entry = car(entries);
-	if (car(entry) == symbol("bind"))
+	Value* rslt = _f;
+
+	// Look for a rule matching the expression.
+	if (rslt == _f)
+		rslt = find_and_apply_fun(env, operator_, args);
+
+	// Since there was no rule, try to apply an implicit rule based on a
+	// composite type.
+	if (rslt == _f)
+		rslt = try_apply_implicit_fun(env, operator_, args);
+
+	if (rslt == _f)
+		error(list(string("Unable to evaluate form: "), cons(operator_, args)));
+
+	return rslt;
+}
+
+Value* evaluate_scope_entry(Value** env, Value* expr)
+{
+	if (consp(expr))
 	{
-		if (sym == cadr(entry))
-			return caddr(entry);
+		Value* head_expr = car(expr);
+
+		if (head_expr == symbol("def"))
+			return evaluate_def(env, cdr(expr));
+
+		if (head_expr == symbol("type"))
+			return evaluate_type_def(env, cdr(expr));
+
+		if (head_expr == symbol("fun"))
+			return evaluate_fun_def(env, cdr(expr));
 	}
 
-	return lookup_define_recurse(env, sym, cdr(entries));
-}
-
-Value* lookup_define(Value* env, Value* symbol)
-{
-	return lookup_define_recurse(env, symbol, env);
-}
-
-Value* match_pattern(Value* pattern, Value* expr)
-{
-	if (symbolp(pattern))
-		return pattern == expr ? nil : _f;
-
-	if (nil == pattern)
-		return expr == nil ? nil : _f;
-
-	assert(consp(pattern));
-
-	Value* head_matches = _f;
-	if (symbol("unquote") == car(pattern))
-	{
-		assert(symbolp(cadr(pattern)));
-		assert(nil == cddr(pattern));
-		return list(list(cadr(pattern), expr));
-	}
-	else
-	{
-		if (!consp(expr))
-			return _f;
-		head_matches = match_pattern(car(pattern), car(expr));
-	}
-
-	if (head_matches == _f)
-		return _f;
-
-	Value* tail_matches = _f;
-	if (listp(cdr(pattern)))
-	{
-		tail_matches = match_pattern(cdr(pattern), cdr(expr));
-	}
-	else
-	{
-		assert(consp(cdr(pattern)));
-		assert(symbol("unquote") == car(cdr(pattern)));
-		Value* sym = cadr(cdr(pattern));
-		tail_matches = list(list(sym, cdr(expr)));
-	}
-
-	if (head_matches == _f || tail_matches == _f)
-		return _f;
-
-	return append(head_matches, tail_matches);
-}
-
-Value* find_pattern_match_recurse(Value* env, Value* expr, Value* entries)
-{
-	if (env == nil)
-		return _f;
-
-	assert(listp(entries));
-
-	Value* entry = car(entries);
-	if (car(entry) == symbol("rule"))
-	{
-		Value* rule = cadr(entry);
-		Value* ptn = car(rule);
-		Value* matches = match_pattern(ptn, expr);
-		if (matches != _f)
-			return list(matches, rule);
-	}
-	else if (car(entry) == symbol("module"))
-	{
-		Value* subenv = caddr(entry);
-		Value* res = find_pattern_match_recurse(env, expr, subenv);
-		if (res != _f)
-			return res;
-	}
-	return find_pattern_match_recurse(env, expr, cdr(entries));
-}
-
-Value* find_pattern_match(Value* env, Value* expr)
-{
-	return find_pattern_match_recurse(env, expr, env);
-}
-
-Value* evaluate(Value* env, Value* expr);
-
-Value* evaluate_list_recurse(Value* env, Value* list)
-{
-	if (nil == list)
-		return nil;
-
-	assert(consp(list));
-
-	// Check whether we need to splice the child list into the parent list.
-	if (consp(car(list)) && symbol("unquote-splicing") == car(car(list)))
-		return append(evaluate(env, cadr(car(list))),
-				evaluate_list_recurse(env, cdr(list)));
-	else
-		return cons(evaluate(env, car(list)), evaluate_list_recurse(env, cdr(list)));
-}
-
-Value* evaluate_list(Value* env, Value* form)
-{
-	return evaluate_list_recurse(env, form);
-}
-
-Value* bind_matches(Value* env, Value* matches)
-{
-	if (matches == nil)
-		return env;
-	Value* sym = car(car(matches));
-	Value* val = cadr(car(matches));
-	return cons(list(symbol("bind"), sym, val),
-			bind_matches(env, cdr(matches)));
-}
-
-Value* evaluate_pattern(Value* env, Value* form)
-{
-	assert(form != nil);
-
-	Value* evalfm = evaluate_list(env, form);
-	Value* srch_res = find_pattern_match(env, evalfm);
-	assert(srch_res != _f);
-	if (srch_res == _f)
-		return _f;
-
-	Value* matches = car(srch_res);
-	Value* rule = cadr(srch_res);
-	Value* expr = cadr(rule);
-	Value* rule_env = caddr(rule);
-
-	Value* new_env = bind_matches(rule_env, matches);
-	return evaluate(new_env, expr);
-}
-
-void push_scope(Value* entry, Value* env)
-{
-	assert(symbol("module") == car(car(env)));
-
-	set_car(cddr(car(env)), new Cell(entry, caddr(car(env))));
-}
-
-Value* compile_pattern(Value* env, Value* ptn);
-
-Value* compile_pattern_list(Value* env, Value* ptn)
-{
-	if (ptn == nil)
-		return nil;
-
-	if (!consp(ptn))
-		return compile_pattern(env, ptn);
-
-	return cons(compile_pattern(env, car(ptn)),
-			compile_pattern_list(env, cdr(ptn)));
-}
-
-Value* compile_pattern(Value* env, Value* ptn)
-{
-	assert(ptn != nil);
-
-	if (consp(ptn))
-	{
-		if (symbol("unquote") == car(ptn))
-			return ptn;
-		return compile_pattern_list(env, ptn);
-	}
-
-	if (symbolp(ptn))
-		return evaluate(env, ptn);
-
-	return ptn;
-}
-
-Value* evaluate_quasiquote(Value* env, Value* expr);
-
-Value* evaluate_quasiquote_list(Value* env, Value* list)
-{
-	if (nil == list)
-		return nil;
-
-	// Check whether this element is an unquote-splicing.
-	if (consp(car(list)) && symbol("unquote-splicing") == car(car(list)))
-	{
-		Value* res = evaluate(env, car(list));
-		assert(listp(res));
-		return append(res, evaluate_quasiquote_list(env, cdr(list)));
-	}
-
-	return cons(evaluate_quasiquote(env, car(list)),
-			evaluate_quasiquote_list(env, cdr(list)));
-}
-
-Value* evaluate_quasiquote(Value* env, Value* expr)
-{
-	if (!listp(expr))
-		return expr;
-
-        // TODO: Handle nested quasiquote.
-        assert(!consp(expr) || symbol("quasiquote") != car(expr));
-
-	if (consp(expr) && symbol("unquote") == car(expr))
-	{
-		Value* unquote_expr = cadr(expr);
-		return evaluate(env, unquote_expr);
-	}
-
-	return expr;
-}
-
-void define_implicit_operator(Value* env, Value* ptn)
-{
-	// Check whether there is an undefined operator referenced as the first
-	// element of the pattern - if so, define it implicitly, as a convenence.
-	if (consp(ptn) && symbolp(car(ptn)))
-	{
-		Value* sym = car(ptn);
-		push_scope(list(symbol("bind"), sym,
-					list(symbol("operator"), sym, gensym())), env);
-	}
+	return evaluate(*env, expr);
 }
 
 Value* evaluate(Value* env, Value* expr)
 {
+	if (symbolp(expr))
+		return evaluate_symbol(env, expr);
+
 	if (stringp(expr))
 		return expr;
 
-	if (symbolp(expr))
-		return lookup_define(env, expr);
-
-	if (listp(expr))
+	if (!listp(expr))
 	{
-		// Evaluate quoted expressions.
-		if (expr != nil && car(expr) == symbol("quote"))
-		{
-			assert(cdr(expr) != nil);
-			assert(cddr(expr) == nil);
-			return cadr(expr);
-		}
-
-		// Evaluate quasi-quoted expressions.
-		if (expr != nil && car(expr) == symbol("quasiquote"))
-		{
-			Value* quote_expr = cadr(expr);
-			return evaluate_quasiquote(env, quote_expr);
-		}
-
-		// Evaluate symbol bindings.
-		if (expr != nil && car(expr) == symbol("bind"))
-		{
-			Value* sym = cadr(expr);
-			Value* val_expr = caddr(expr);
-			Value* val = evaluate(env, val_expr);
-			push_scope(list(symbol("bind"), sym, val), env);
-			return nil;
-		}
-
-		// Evaluate rule definitions.
-		if (expr != nil && car(expr) == symbol("rule"))
-		{
-			define_implicit_operator(env, cadr(expr));
-			Value* ptn = compile_pattern(env, cadr(expr));
-			Value* rule_expr = caddr(expr);
-			assert(cdddr(expr) == nil);
-			push_scope(list(symbol("rule"), list(ptn, rule_expr, env)), env);
-			return nil;
-		}
-
-		// Evaluate module member references.
-		if (expr != nil && car(expr) == symbol(".mod"))
-		{
-			Value* mod_name = cadr(expr);
-			Value* member = caddr(expr);
-
-			Value* mod = lookup_define(env, mod_name);
-			Value* contents = caddr(mod);
-			return lookup_define(contents, member);
-		}
-
-		// Directly construct Cell instances, so that we don't wind up with a
-		// shared instance (which would happen if we used cons()).
-		Value* scope = new Cell(symbol("module"),
-				new Cell(nil, new Cell(nil, nil)));
-		Value* new_env = new Cell(scope, env);
-
-		if (expr != nil && car(expr) == symbol("module"))
-		{
-			Value* mod_name = cadr(expr);
-			set_car(cdr(scope), mod_name);
-			evaluate_list(new_env, caddr(expr));
-
-			// Grab the scope at the top of the stack - all the sub-defines
-			// and rules have been added to it. This will now be the module
-			// object.
-			Value* mod = car(new_env);
-
-			// Add the module to the scope, so that rules will automatically
-			// be used.
-			push_scope(mod, env);
-
-			// Add the module as a define, so it can be accessed via name.
-			push_scope(list(symbol("bind"), mod_name, mod), env);
-
-			return mod;
-		}
-
-		return evaluate_pattern(new_env, expr);
+		error(list(string("Unexpected value: "), expr));
+		return nil;
 	}
 
-	assert(0);
-	return _f;
-}
+	if (nilp(expr))
+	{
+		error(string("Unable to evaluate nil form"));
+		return nil;
+	}
 
-//(rule (list . ,args)
-// args)
+	Value* head_expr = car(expr);
 
-//(rule (map ,operator (,head . ,tail))
-// `((,operator ,head) . ,(map operator tail)))
-//(rule (map ,operator ())
-// '())
+	if (head_expr == symbol("def"))
+		return evaluate_def(env, cdr(expr));
 
-//(rule (code-expr ,operator (,primitive . ,args))
-// (rule (arg-code ,arg)
-//  (code-expr operator arg))
-// `(code ,operator (,primitive ,@(list ,@(map 'arg-code args)))))
+	if (head_expr == symbol("type"))
+		return evaluate_type_def(env, cdr(expr));
 
-//(rule (arg-binding-forms ())
-// '())
-//(rule (arg-binding-forms ((,arg-name ,arg-expr) . ,args-tail))
-// '((bind ,arg-name ,arg-expr) . ,(arg-binding-forms args-tail)))
-//
-//(rule (method ,operator ,type-name ,args ,expr)
-// `(method
-//   ,(generate-method-name operator type-name args)
-//   ,args
-//   ,(,@(arg-binding-forms args)
-//     ,@(code-expr operator expr))))
+	if (head_expr == symbol("fun"))
+		return evaluate_fun_def(env, cdr(expr));
 
-//***************************************************************************
-//// Declaration:
-//(define (ui (string x0))
-// (form
-//  (label x0)
-//  (field x0)))
-//
-//// Transformed to:
-//(rule (ui string)
-// (composite ((string x0))
-//  (form
-//   (label x0)
-//   (field x0))))
-//***************************************************************************
+	Value* head = evaluate(env, head_expr);
 
-int main(int /*argc*/, char* /*argv*/[])
-{
-	return 0;
+	if (operatorp(head))
+		return evaluate_type_form(env, head, cdr(expr));
+
+	error(list(string("Unable to evaluate form: "), expr));
+	return nil;
 }
