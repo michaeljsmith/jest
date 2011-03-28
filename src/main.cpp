@@ -320,6 +320,32 @@ Value* uqs(Value* expr)
 	return list(symbol("unquote-splicing"), expr);
 }
 
+Value* evaluate(Value* env, Value* expr);
+
+Value* evaluate_scope_entry(Value** env, Value* expr)
+{
+	if (consp(expr))
+	{
+		Value* head_expr = car(expr);
+
+		// Note: when creating new operators, make sure to create
+		// operator-anchors to require attaching the scope on evaluation.
+		if (head_expr == symbol("def"))
+			return evaluate_def(env, cdr(expr));
+
+		if (head_expr == symbol("prim"))
+			return evaluate_prim(env, cdr(expr));
+
+		if (head_expr == symbol("type"))
+			return evaluate_type_def(env, cdr(expr));
+
+		if (head_expr == symbol("fun"))
+			return evaluate_fun_def(env, cdr(expr));
+	}
+
+	return evaluate(*env, expr);
+}
+
 Value* match_fun_pattern_recurse(Value* fun_arg, Value* arg, Value* matches)
 {
 	// Check whether we are matching a constant.
@@ -368,7 +394,7 @@ Value* bind_recurse(Value* env, Value* matches)
 	if (nilp(matches))
 		return env;
 	return bind_recurse(
-			cons(cons(symbol("define"), car(matches)), env), cdr(matches));
+			cons(cons(symbol("def"), car(matches)), env), cdr(matches));
 }
 
 Value* bind_and_apply_fun(Value* env, Value* matches, Value* expr)
@@ -386,6 +412,9 @@ Value* find_and_apply_fun(Value* env, Value* operator_, Value* args)
 	if (env == nil)
 		return _f;
 
+	// TODO: Also check type funs!
+	assert(0);
+
 	// Check whether this is a fun that matches the expression.
 	Value* entry = car(env);
 	Value* fun = (consp(entry) && symbol("fun") == car(entry) ?
@@ -401,6 +430,30 @@ Value* find_and_apply_fun(Value* env, Value* operator_, Value* args)
 	return find_and_apply_fun(cdr(env), operator_, args);
 }
 
+Value* find_matching_compound_and_apply_implicit_recurse(
+		Value* env, Value* expr)
+{
+	// Check whether we have searched the entire stack and failed to find a
+	// matching compound.
+	if (env == nil)
+		return _f;
+
+	asdf;
+
+	// We didn't match, so recurse to the next entry on the stack.
+	return find_matching_compound_and_apply_implicit_recurse(cdr(env), expr);
+}
+
+Value* try_apply_implicit_fun(Value* env, Value* operator_, Value* args)
+{
+	// TODO: in addition to the main env, we need to search the partial envs
+	// of all the operators.
+	asdf;
+	
+	// Check whether we have searched the entire stack and failed to find a
+	// matching type.
+}
+
 Value* evaluate_form(Value* env, Value* operator_, Value* arg_exprs)
 {
 	// Evaluate the args in a subscope.
@@ -408,16 +461,11 @@ Value* evaluate_form(Value* env, Value* operator_, Value* arg_exprs)
 
 	Value* rslt = _f;
 
-	// Look for a composite type matching this expression. 
-	if (rslt == _f)
-		rslt = evaluate_type_expr(env, operator_, args);
-
-	// Look for a rule matching the expression.
+	// Look for a rule matching the expression (or a type expression).
 	if (rslt == _f)
 		rslt = find_and_apply_fun(env, operator_, args);
 
-	// Since there was no rule, try to apply an implicit rule based on a
-	// composite type.
+	// Try to apply an implicit rule based on a composite type.
 	if (rslt == _f)
 		rslt = try_apply_implicit_fun(env, operator_, args);
 
@@ -425,30 +473,6 @@ Value* evaluate_form(Value* env, Value* operator_, Value* arg_exprs)
 		return error(list(string("Unable to evaluate form: "), cons(operator_, args)));
 
 	return rslt;
-}
-
-Value* evaluate_scope_entry(Value** env, Value* expr)
-{
-	if (consp(expr))
-	{
-		Value* head_expr = car(expr);
-
-		// Note: when creating new operators, make sure to create
-		// operator-anchors to require attaching the scope on evaluation.
-		if (head_expr == symbol("def"))
-			return evaluate_def(env, cdr(expr));
-
-		if (head_expr == symbol("prim"))
-			return evaluate_prim(env, cdr(expr));
-
-		if (head_expr == symbol("type"))
-			return evaluate_type_def(env, cdr(expr));
-
-		if (head_expr == symbol("fun"))
-			return evaluate_fun_def(env, cdr(expr));
-	}
-
-	return evaluate(*env, expr);
 }
 
 Value* evaluate(Value* env, Value* expr)
