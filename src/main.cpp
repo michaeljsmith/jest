@@ -320,10 +320,85 @@ Value* uqs(Value* expr)
 	return list(symbol("unquote-splicing"), expr);
 }
 
+Value* match_fun_pattern_recurse(Value* fun_arg, Value* arg, Value* matches)
+{
+	// Check whether we are matching a constant.
+	if (symbolp(fun_arg))
+		return (symbolp(arg) && arg == fun_arg ? matches : _f);
+
+	// Check whether we are matching a variable.
+	if (consp(fun_arg) && symbol("var") == car(fun_arg))
+	{
+		check(nilp(cdr(cdr(fun_arg))), "Pattern corrupt.");
+		Value* name = cadr(fun_arg);
+		Value* old = assoc(name, matches);
+		if (old != _f && cadr(old) != arg)
+			return _f;
+		return cons(list(name, arg), matches);
+	}
+	// Check whether we are matching a list.
+	else if (listp(fun_arg))
+	{
+		if (nilp(fun_args) && nilp(args))
+			return matches;
+		if (nilp(fun_args) || nilp(args))
+			return _f;
+
+		// Match the heads of the lists.
+		matches = match_fun_pattern_recurse(car(fun_args), car(args), matches);
+		if (matches == _f)
+			return _f;
+
+		// Now try matching the tails.
+		return match_fun_pattern_recurse(cdr(fun_args), cdr(args), matches);
+	}
+
+	return error("Corrupt argument pattern."); 
+}
+
+Value* match_fun_pattern(Value* fun_op, Value* fun_args,
+						 Value* op, Value* args)
+{
+	return match_fun_pattern_recurse(
+			cons(fun_op, fun_args), cons(op, args), nil);
+}
+
+Value* bind_recurse(Value* env, Value* matches)
+{
+	if (nilp(matches))
+		return env;
+	return bind_recurse(
+			cons(cons(symbol("define"), car(matches)), env), cdr(matches));
+}
+
+Value* bind_and_apply_fun(Value* env, Value* matches, Value* expr)
+{
+	evaluate(bind_recurse(env, matches), expr);
+}
+
 Value* find_and_apply_fun(Value* env, Value* operator_, Value* args)
 {
-	// Note: in addition to the main env, we need to search the partial envs
+	// TODO: in addition to the main env, we need to search the partial envs
 	// of all the operators.
+	
+	// Check whether we have searched the entire stack and failed to find a
+	// matching rule.
+	if (env == nil)
+		return _f;
+
+	// Check whether this is a fun that matches the expression.
+	Value* entry = car(env);
+	Value* fun = (consp(entry) && symbol("fun") == car(entry) ?
+				  cdr(entry) : _f);
+	check(_f == fun || (consp(fun) && consp(cdr(fun)) &&
+						consp(consp(cdr(fun)))), "Function entry corrupt.");
+	Value* matches = (_f != fun ? match_fun_pattern(
+			car(fun), cadr(fun), car(operator_), args) : _f);
+	if (_f != matches)
+		return bind_and_apply_fun(cadddr(fun), matches, caddr(fun));
+
+	// We didn't match, so recurse to the next entry on the stack.
+	return find_and_apply_fun(cdr(env), operator_, args);
 }
 
 Value* evaluate_form(Value* env, Value* operator_, Value* arg_exprs)
@@ -332,6 +407,10 @@ Value* evaluate_form(Value* env, Value* operator_, Value* arg_exprs)
 	Value* args = evaluate_form_args(env, arg_exprs);
 
 	Value* rslt = _f;
+
+	// Look for a composite type matching this expression. 
+	if (rslt == _f)
+		rslt = evaluate_type_expr(env, operator_, args);
 
 	// Look for a rule matching the expression.
 	if (rslt == _f)
@@ -343,7 +422,7 @@ Value* evaluate_form(Value* env, Value* operator_, Value* arg_exprs)
 		rslt = try_apply_implicit_fun(env, operator_, args);
 
 	if (rslt == _f)
-		error(list(string("Unable to evaluate form: "), cons(operator_, args)));
+		return error(list(string("Unable to evaluate form: "), cons(operator_, args)));
 
 	return rslt;
 }
@@ -354,8 +433,13 @@ Value* evaluate_scope_entry(Value** env, Value* expr)
 	{
 		Value* head_expr = car(expr);
 
+		// Note: when creating new operators, make sure to create
+		// operator-anchors to require attaching the scope on evaluation.
 		if (head_expr == symbol("def"))
 			return evaluate_def(env, cdr(expr));
+
+		if (head_expr == symbol("prim"))
+			return evaluate_prim(env, cdr(expr));
 
 		if (head_expr == symbol("type"))
 			return evaluate_type_def(env, cdr(expr));
@@ -376,16 +460,10 @@ Value* evaluate(Value* env, Value* expr)
 		return expr;
 
 	if (!listp(expr))
-	{
-		error(list(string("Unexpected value: "), expr));
-		return nil;
-	}
+		return error(list(string("Unexpected value: "), expr));
 
 	if (nilp(expr))
-	{
-		error(string("Unable to evaluate nil form"));
-		return nil;
-	}
+		return error(string("Unable to evaluate nil form"));
 
 	Value* head_expr = car(expr);
 
@@ -403,6 +481,5 @@ Value* evaluate(Value* env, Value* expr)
 	if (operatorp(head))
 		return evaluate_type_form(env, head, cdr(expr));
 
-	error(list(string("Unable to evaluate form: "), expr));
-	return nil;
+	return error(list(string("Unable to evaluate form: "), expr));
 }
