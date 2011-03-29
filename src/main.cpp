@@ -404,6 +404,9 @@ Value* bind_and_apply_fun(Value* env, Value* matches, Value* expr)
 
 Value* find_and_apply_fun(Value* env, Value* operator_, Value* args)
 {
+	// TODO: This is wrong - function argument lists specify interfaces rather
+	// than actual types.
+
 	// TODO: in addition to the main env, we need to search the partial envs
 	// of all the operators.
 	
