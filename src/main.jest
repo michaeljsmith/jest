@@ -41,3 +41,25 @@
 (primitive (gettable (type ,type) ((executable ,type) ,getter)))
 (define (get ((gettable ,type) ((executable ,type) ,getter)) ((executable ,type void) ,cont))
   ((executable type void) (getter cont)))
+
+()
+
+(type HWND)
+
+(concept element
+  (function (create (HWND parent) (element e)))
+  (function (destroy (HWND parent) (element e))))
+
+(model element (label (string s))
+
+(primitive (label (string s))
+  (model element)
+  (function (create (HWND parent) (label l))))
+
+(operator ui
+  (function (ui (string s))
+	(frame
+	  "Sample App"
+	  (vertical
+		(label s)
+		(edit s)))))
