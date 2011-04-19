@@ -63,3 +63,29 @@
 	  (vertical
 		(label s)
 		(edit s)))))
+
+()
+
+(concept view-element)
+
+(type edit (string s))
+
+()
+
+(concept widget)
+
+(widget (label (string s)))
+
+()
+
+(def widget (concept))
+
+(def (label (string s))
+  (model widget))
+
+(def (ui (string s))
+  (frame
+    "Sample App"
+    (vertical
+      (label s)
+      (edit s))))
