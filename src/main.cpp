@@ -52,7 +52,7 @@ Value* default_env = 0;
 
 #include <map>
 #include <string>
-Value* cons(Value* head, Value* tail)
+Value* cons_b(Value* head, Value* tail)
 {
 	using namespace std;
 
@@ -68,52 +68,52 @@ Value* cons(Value* head, Value* tail)
 	return (*pos).second;
 }
 
-bool consp(Value* x)
+bool consp_b(Value* x)
 {
 	return x->type == cell_type;
 }
 
-bool listp(Value* x)
+bool listp_b(Value* x)
 {
-	return 0 == x || consp(x);
+	return 0 == x || consp_b(x);
 }
 
-Value* list()
+Value* list_b()
 {
 	return 0;
 }
 
-Value* list(Value* x0)
+Value* list_b(Value* x0)
 {
-	return cons(x0, list());
+	return cons_b(x0, list_b());
 }
 
-Value* list(Value* x0, Value* x1)
+Value* list_b(Value* x0, Value* x1)
 {
-	return cons(x0, list(x1));
+	return cons_b(x0, list_b(x1));
 }
 
-Value* list(Value* x0, Value* x1, Value* x2)
+Value* list_b(Value* x0, Value* x1, Value* x2)
 {
-	return cons(x0, list(x1, x2));
+	return cons_b(x0, list_b(x1, x2));
 }
 
-Value* list(Value* x0, Value* x1, Value* x2, Value* x3)
+Value* list_b(Value* x0, Value* x1, Value* x2, Value* x3)
 {
-	return cons(x0, list(x1, x2, x3));
+	return cons_b(x0, list_b(x1, x2, x3));
 }
 
-Value* list(Value* x0, Value* x1, Value* x2, Value* x3, Value* x4)
+Value* list_b(Value* x0, Value* x1, Value* x2, Value* x3, Value* x4)
 {
-	return cons(x0, list(x1, x2, x3, x4));
+	return cons_b(x0, list_b(x1, x2, x3, x4));
 }
 
-Value* list(Value* x0, Value* x1, Value* x2, Value* x3, Value* x4, Value* x5)
+Value* list_b(Value* x0, Value* x1, Value* x2, Value* x3, Value* x4, Value* x5)
 {
-	return cons(x0, list(x1, x2, x3, x4, x5));
+	return cons_b(x0, list_b(x1, x2, x3, x4, x5));
 }
 
-Value* symbol(char const* s)
+Value* symbol_b(char const* s)
 {
 	using namespace std;
 
@@ -123,38 +123,61 @@ Value* symbol(char const* s)
 	SymMap::iterator pos = symbol_map.find(str);
 	if (pos == symbol_map.end())
 	{
-		Value* symbol = new Symbol(s);
-		pos = symbol_map.insert(make_pair(str, symbol)).first;
+		Value* symbol_b = new Symbol(s);
+		pos = symbol_map.insert(make_pair(str, symbol_b)).first;
 	}
 
 	return (*pos).second;
 }
+
+struct Handle
+{
+    Value* x;
+
+    Value* operator()() {return list_b(x);}
+
+    operator Value*() {return x;}
+
+    template <typename X0> Value* operator()(X0 const& x0) {return list_b(x, handle(x0));}
+    template <typename X0, typename X1> Value* operator()(X0 const& x0, X1 const& x1) {return list_b(x, handle(x0), handle(x1));}
+    template <typename X0, typename X1, typename X2> Value* operator()(X0 const& x0, X1 const& x1, X2 const& x2) {return list_b(x, handle(x0), handle(x1), handle(x2));}
+    template <typename X0, typename X1, typename X2, typename X3> Value* operator()(X0 const& x0, X1 const& x1, X2 const& x2, X3 const& x3) {return list_b(x, handle(x0), handle(x1), handle(x2), handle(x3));}
+    template <typename X0, typename X1, typename X2, typename X3, typename X4> Value* operator()(X0 const& x0, X1 const& x1, X2 const& x2, X3 const& x3, X4 const& x4) {return list_b(x, handle(x0), handle(x1), handle(x2), handle(x3), handle(x4));}
+    template <typename X0, typename X1, typename X2, typename X3, typename X4, typename X5> Value* operator()(X0 const& x0, X1 const& x1, X2 const& x2, X3 const& x3, X4 const& x4, X5 const& x5) {return list_b(x, handle(x0), handle(x1), handle(x2), handle(x3), handle(x4), handle(x5));}
+
+    template <typename Idx> Value* operator[](Idx idx) {return list_b(symbol_b("member"), x, handle(idx));}
+
+    Handle(Value* x): x(x) {}
+};
+
+Handle handle(Value* x) {return Handle(x);}
+Handle handle(char const* x) {return Handle(symbol_b(x));}
 
 Value* gensym()
 {
 	static int next_id = 100;
 	char str[1024];
 	sprintf(str, "@gensym%d", next_id++);
-	return symbol(str);
+	return symbol_b(str);
 }
 
-bool symbolp(Value* x)
+bool symbolp_b(Value* x)
 {
 	return x->type == symbol_type;
 }
 
 const char* symbol_text(Value* symbol)
 {
-	assert(symbolp(symbol));
+	assert(symbolp_b(symbol));
 	return ((Symbol*)symbol)->sym;
 }
 
-bool stringp(Value* x)
+bool stringp_b(Value* x)
 {
 	return x->type == string_type;
 }
 
-Value* str(char const* text)
+Value* str_b(char const* text)
 {
 	using namespace std;
 
@@ -171,342 +194,273 @@ Value* str(char const* text)
 	return (*pos).second;
 }
 
-Value* symbol_name(Value* sym)
+Value* symbol_name_b(Value* sym)
 {
-	assert(symbolp(sym));
-	return str(((Symbol*)sym)->sym);
+	assert(symbolp_b(sym));
+	return str_b(((Symbol*)sym)->sym);
 }
 
 const char* text(Value* s)
 {
-	assert(stringp(s));
+	assert(stringp_b(s));
 	return ((String*)s)->text;
 }
 
-Value* concatenate(Value* l, Value* r)
+Value* concatenate_b(Value* l, Value* r)
 {
 	char const* tl = text(l);
 	char const* tr = text(r);
 	char* buf = new char [strlen(tl) + strlen(tr) + 1];
 	strcpy(buf, tl);
 	strcat(buf, tr);
-	Value* res = str(buf);
+	Value* res = str_b(buf);
 	delete [] buf;
 	return res;
 }
 
-Value* car(Value* x)
+Value* car_b(Value* x)
 {
-	assert(consp(x));
+	assert(consp_b(x));
 	return ((Cell*)x)->head;
 }
 
-Value* cdr(Value* x)
+Value* cdr_b(Value* x)
 {
-	assert(consp(x));
+	assert(consp_b(x));
 	return ((Cell*)x)->tail;
 }
 
-Value* cadr(Value* x)
+Value* cadr_b(Value* x)
 {
-	assert(consp(x));
-	return car(((Cell*)x)->tail);
+	assert(consp_b(x));
+	return car_b(((Cell*)x)->tail);
 }
 
-Value* cddr(Value* x)
+Value* cddr_b(Value* x)
 {
-	assert(consp(x));
-	return cdr(((Cell*)x)->tail);
+	assert(consp_b(x));
+	return cdr_b(((Cell*)x)->tail);
 }
 
-Value* caddr(Value* x)
+Value* caddr_b(Value* x)
 {
-	assert(consp(x));
-	return cadr(((Cell*)x)->tail);
+	assert(consp_b(x));
+	return cadr_b(((Cell*)x)->tail);
 }
 
-Value* cdddr(Value* x)
+Value* cdddr_b(Value* x)
 {
-	assert(consp(x));
-	return cddr(((Cell*)x)->tail);
+	assert(consp_b(x));
+	return cddr_b(((Cell*)x)->tail);
 }
 
-Value* cadddr(Value* x)
+Value* cadddr_b(Value* x)
 {
-	assert(consp(x));
-	return caddr(((Cell*)x)->tail);
+	assert(consp_b(x));
+	return caddr_b(((Cell*)x)->tail);
 }
 
-Value* cddddr(Value* x)
+Value* cddddr_b(Value* x)
 {
-	assert(consp(x));
-	return cdddr(((Cell*)x)->tail);
+	assert(consp_b(x));
+	return cdddr_b(((Cell*)x)->tail);
 }
 
-Value* caddddr(Value* x)
+Value* caddddr_b(Value* x)
 {
-	assert(consp(x));
-	return cadddr(((Cell*)x)->tail);
+	assert(consp_b(x));
+	return cadddr_b(((Cell*)x)->tail);
 }
 
-void set_car(Value* c, Value* x)
-{
-	assert(consp(x));
-	((Cell*)c)->head = x;
-}
-
-Value* append(Value* l, Value* r)
+Value* append_b(Value* l, Value* r)
 {
 	if (l == nil)
 		return r;
-	return cons(car(l), append(cdr(l), r));
+	return cons_b(car_b(l), append_b(cdr_b(l), r));
 }
 
 Value* reverse_helper(Value* l, Value* x)
 {
 	if (0 == l)
 		return x;
-	assert(consp(l));
-	return reverse_helper(cdr(l), cons(car(l), x));
+	assert(consp_b(l));
+	return reverse_helper(cdr_b(l), cons_b(car_b(l), x));
 }
 
-Value* reverse(Value* x)
+Value* reverse_b(Value* x)
 {
 	return reverse_helper(x, 0);
 }
 
-Value* literal(char const* s)
+Value* q_b(Value* expr)
 {
-	return symbol(s);
+	return list_b(symbol_b("quote"), expr);
 }
 
-Value* literal(Value* x)
+Value* qq_b(Value* expr)
 {
-	return x;
+	return list_b(symbol_b("quasiquote"), expr);
 }
 
-Value* f()
+Value* uq_b(Value* expr)
 {
-	return nil;
+	return list_b(symbol_b("unquote"), expr);
 }
 
-template <typename X0> Value* f(X0 x0)
+Value* uqs_b(Value* expr)
 {
-	return cons(literal(x0), f());
+	return list_b(symbol_b("unquote-splicing"), expr);
 }
 
-template <typename X0, typename X1> Value* f(X0 x0, X1 x1)
+struct BuiltinCaller
 {
-	return cons(literal(x0), f(x1));
+    virtual Value* call(Value* args) = 0;
+};
+
+template <typename S> struct BuiltinCallerImpl {};
+
+template <> struct BuiltinCallerImpl<Value* ()> : public BuiltinCaller
+{
+    Value* (*fn)();
+    BuiltinCallerImpl(Value* (*fn)()): fn(fn) {}
+    virtual Value* call(Value* args)
+    {
+        return fn();
+    }
+};
+
+template <> struct BuiltinCallerImpl<Value* (Value*)> : public BuiltinCaller
+{
+    Value* (*fn)(Value*);
+    BuiltinCallerImpl(Value* (*fn)(Value*)): fn(fn) {}
+    virtual Value* call(Value* args)
+    {
+        return fn(car_b(args));
+    }
+};
+
+template <> struct BuiltinCallerImpl<Value* (Value*, Value*)> : public BuiltinCaller
+{
+    Value* (*fn)(Value*, Value*);
+    BuiltinCallerImpl(Value* (*fn)(Value*, Value*)): fn(fn) {}
+    virtual Value* call(Value* args)
+    {
+        return fn(car_b(args), cadr_b(args));
+    }
+};
+
+char const* builtin_type = "builtin";
+struct Builtin : public Value
+{
+    BuiltinCaller* caller;
+
+    template <typename S> Builtin(S* fn) : Value(builtin_type), caller(new BuiltinCallerImpl<S>(fn)) {}
+    ~Builtin() {delete caller;}
+};
+
+bool builtinp(Value* x)
+{
+	return x->type == symbol_type;
 }
 
-Value* q(Value* expr)
+Value* builtins = nil;
+
+void push_builtin(char const* name, Value* val)
 {
-	return list(symbol("quote"), expr);
+    builtins = cons_b(list_b(symbol_b(name), val), builtins);
 }
 
-Value* qq(Value* expr)
+template <typename S> Value* define_builtin_fn(char const* name, S fn)
 {
-	return list(symbol("quasiquote"), expr);
+    push_builtin(name, new Builtin(fn));
+    return symbol_b(name);
 }
 
-Value* uq(Value* expr)
-{
-	return list(symbol("unquote"), expr);
-}
+#define BUILTIN(n) Handle n(define_builtin_fn(#n, n##_b))
+BUILTIN(cons);
 
-Value* uqs(Value* expr)
+#include <set>
+#define FORMAT(x) do \
+{char const* s = (x); strcpy(buf, s); buf += strlen(s);} while(0)
+void debug_format_recurse(
+		char*& buf, Value* x, std::set<Value*>& printed_cells)
 {
-	return list(symbol("unquote-splicing"), expr);
-}
-
-Value* evaluate(Value* env, Value* expr);
-
-Value* evaluate_scope_entry(Value** env, Value* expr)
-{
-	if (consp(expr))
+	if (0 == x)
 	{
-		Value* head_expr = car(expr);
-
-		// Note: when creating new operators, make sure to create
-		// operator-anchors to require attaching the scope on evaluation.
-		if (head_expr == symbol("def"))
-			return evaluate_def(env, cdr(expr));
-
-		if (head_expr == symbol("prim"))
-			return evaluate_prim(env, cdr(expr));
-
-		if (head_expr == symbol("type"))
-			return evaluate_type_def(env, cdr(expr));
-
-		if (head_expr == symbol("fun"))
-			return evaluate_fun_def(env, cdr(expr));
+		FORMAT("()");
 	}
-
-	return evaluate(*env, expr);
-}
-
-Value* match_fun_pattern_recurse(Value* fun_arg, Value* arg, Value* matches)
-{
-	// Check whether we are matching a constant.
-	if (symbolp(fun_arg))
-		return (symbolp(arg) && arg == fun_arg ? matches : _f);
-
-	// Check whether we are matching a variable.
-	if (consp(fun_arg) && symbol("var") == car(fun_arg))
+	else if (_f == x)
 	{
-		check(nilp(cdr(cdr(fun_arg))), "Pattern corrupt.");
-		Value* name = cadr(fun_arg);
-		Value* old = assoc(name, matches);
-		if (old != _f && cadr(old) != arg)
-			return _f;
-		return cons(list(name, arg), matches);
+		FORMAT("_f");
 	}
-	// Check whether we are matching a list.
-	else if (listp(fun_arg))
+	else if (consp_b(x))
 	{
-		if (nilp(fun_args) && nilp(args))
-			return matches;
-		if (nilp(fun_args) || nilp(args))
-			return _f;
+		if (printed_cells.find(x) != printed_cells.end())
+		{
+			FORMAT("(...)");
+		}
+		else
+		{
+			printed_cells.insert(x);
 
-		// Match the heads of the lists.
-		matches = match_fun_pattern_recurse(car(fun_args), car(args), matches);
-		if (matches == _f)
-			return _f;
-
-		// Now try matching the tails.
-		return match_fun_pattern_recurse(cdr(fun_args), cdr(args), matches);
+			FORMAT("(");
+			for (Value* l = x; l; l = cdr_b(l))
+			{
+				if (consp_b(l))
+				{
+					debug_format_recurse(buf, car_b(l), printed_cells);
+					if (cdr_b(l))
+						FORMAT(" ");
+				}
+				else
+				{
+					FORMAT(" . ");
+					debug_format_recurse(buf, l, printed_cells);
+					break;
+				}
+			}
+			FORMAT(")");
+		}
 	}
+	else if (symbolp_b(x))
+	{
+		char const* str = ((Symbol*)x)->sym;
+		FORMAT(str);
+	}
+	else if (stringp_b(x))
+	{
+		FORMAT(text(x));
+	}
+}
+#undef FORMAT
 
-	return error("Corrupt argument pattern."); 
+void debug_print(Value* x)
+{
+	char buffer[1000000];
+	char* buf = buffer;
+
+	std::set<Value*> printed_cells;
+
+	debug_format_recurse(buf, x, printed_cells);
+	fputs(buffer, stdout);
 }
 
-Value* match_fun_pattern(Value* fun_op, Value* fun_args,
-						 Value* op, Value* args)
+char* debug_format(Value* x)
 {
-	return match_fun_pattern_recurse(
-			cons(fun_op, fun_args), cons(op, args), nil);
+	static char buffer[1000000];
+	char* buf = buffer;
+
+	std::set<Value*> printed_cells;
+
+	debug_format_recurse(buf, x, printed_cells);
+	return buffer;
 }
 
-Value* bind_recurse(Value* env, Value* matches)
+Handle prog = cons("a", "b");
+
+int main()
 {
-	if (nilp(matches))
-		return env;
-	return bind_recurse(
-			cons(cons(symbol("def"), car(matches)), env), cdr(matches));
-}
-
-Value* bind_and_apply_fun(Value* env, Value* matches, Value* expr)
-{
-	evaluate(bind_recurse(env, matches), expr);
-}
-
-Value* find_and_apply_fun(Value* env, Value* operator_, Value* args)
-{
-	// TODO: This is wrong - function argument lists specify interfaces rather
-	// than actual types.
-
-	// TODO: in addition to the main env, we need to search the partial envs
-	// of all the operators.
-	
-	// Check whether we have searched the entire stack and failed to find a
-	// matching rule.
-	if (env == nil)
-		return _f;
-
-	// TODO: Also check type funs!
-	assert(0);
-
-	// Check whether this is a fun that matches the expression.
-	Value* entry = car(env);
-	Value* fun = (consp(entry) && symbol("fun") == car(entry) ?
-				  cdr(entry) : _f);
-	check(_f == fun || (consp(fun) && consp(cdr(fun)) &&
-						consp(consp(cdr(fun)))), "Function entry corrupt.");
-	Value* matches = (_f != fun ? match_fun_pattern(
-			car(fun), cadr(fun), car(operator_), args) : _f);
-	if (_f != matches)
-		return bind_and_apply_fun(cadddr(fun), matches, caddr(fun));
-
-	// We didn't match, so recurse to the next entry on the stack.
-	return find_and_apply_fun(cdr(env), operator_, args);
-}
-
-Value* find_matching_compound_and_apply_implicit_recurse(
-		Value* env, Value* expr)
-{
-	// Check whether we have searched the entire stack and failed to find a
-	// matching compound.
-	if (env == nil)
-		return _f;
-
-	asdf;
-
-	// We didn't match, so recurse to the next entry on the stack.
-	return find_matching_compound_and_apply_implicit_recurse(cdr(env), expr);
-}
-
-Value* try_apply_implicit_fun(Value* env, Value* operator_, Value* args)
-{
-	// TODO: in addition to the main env, we need to search the partial envs
-	// of all the operators.
-	asdf;
-	
-	// Check whether we have searched the entire stack and failed to find a
-	// matching type.
-}
-
-Value* evaluate_form(Value* env, Value* operator_, Value* arg_exprs)
-{
-	// Evaluate the args in a subscope.
-	Value* args = evaluate_form_args(env, arg_exprs);
-
-	Value* rslt = _f;
-
-	// Look for a rule matching the expression (or a type expression).
-	if (rslt == _f)
-		rslt = find_and_apply_fun(env, operator_, args);
-
-	// Try to apply an implicit rule based on a composite type.
-	if (rslt == _f)
-		rslt = try_apply_implicit_fun(env, operator_, args);
-
-	if (rslt == _f)
-		return error(list(string("Unable to evaluate form: "), cons(operator_, args)));
-
-	return rslt;
-}
-
-Value* evaluate(Value* env, Value* expr)
-{
-	if (symbolp(expr))
-		return evaluate_symbol(env, expr);
-
-	if (stringp(expr))
-		return expr;
-
-	if (!listp(expr))
-		return error(list(string("Unexpected value: "), expr));
-
-	if (nilp(expr))
-		return error(string("Unable to evaluate nil form"));
-
-	Value* head_expr = car(expr);
-
-	if (head_expr == symbol("def"))
-		return evaluate_def(env, cdr(expr));
-
-	if (head_expr == symbol("type"))
-		return evaluate_type_def(env, cdr(expr));
-
-	if (head_expr == symbol("fun"))
-		return evaluate_fun_def(env, cdr(expr));
-
-	Value* head = evaluate(env, head_expr);
-
-	if (operatorp(head))
-		return evaluate_type_form(env, head, cdr(expr));
-
-	return error(list(string("Unable to evaluate form: "), expr));
+    debug_print(prog);
+    puts("");
+    return 0;
 }
