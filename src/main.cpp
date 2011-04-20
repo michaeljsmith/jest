@@ -134,11 +134,10 @@ struct Handle
 {
     Value* x;
 
-    Value* operator()() {return list_b(x);}
-
     operator Value*() {return x;}
 
-    template <typename X0> Value* operator()(X0 const& x0) {return list_b(x, handle(x0));}
+    Value* operator()() {return list_b(x);}
+    template <typename X0> Value* operator()(X0 const& x0) {assert(0);return list_b(x, handle(x0));}
     template <typename X0, typename X1> Value* operator()(X0 const& x0, X1 const& x1) {return list_b(x, handle(x0), handle(x1));}
     template <typename X0, typename X1, typename X2> Value* operator()(X0 const& x0, X1 const& x1, X2 const& x2) {return list_b(x, handle(x0), handle(x1), handle(x2));}
     template <typename X0, typename X1, typename X2, typename X3> Value* operator()(X0 const& x0, X1 const& x1, X2 const& x2, X3 const& x3) {return list_b(x, handle(x0), handle(x1), handle(x2), handle(x3));}
@@ -391,17 +390,43 @@ char* debug_format(Value* x)
 
 struct BuiltinCaller
 {
-    virtual Value* call(Value* args) = 0;
+    virtual Value* call(char const* fn_name, Value* args) = 0;
 };
 
 template <typename S> struct BuiltinCallerImpl {};
+
+void builtin_check_args_recurse(char const* fn_name, int count, Value* args)
+{
+	if (count == 0 && args == nil)
+		return;
+
+	if (args == nil)
+	{
+		printf("Too few args to function %s\n", fn_name);
+		exit(1);
+	}
+
+	if (count == 0)
+	{
+		printf("Too many args for function %s\n", fn_name);
+		exit(1);
+	}
+
+	builtin_check_args_recurse(fn_name, count - 1, cdr_b(args));
+}
+
+void builtin_check_args(char const* fn_name, int count, Value* args)
+{
+	builtin_check_args_recurse(fn_name, count, args);
+}
 
 template <> struct BuiltinCallerImpl<Value* ()> : public BuiltinCaller
 {
     Value* (*fn)();
     BuiltinCallerImpl(Value* (*fn)()): fn(fn) {}
-    virtual Value* call(Value* args)
+    virtual Value* call(char const* fn_name, Value* args)
     {
+		builtin_check_args(fn_name, 0, args);
         return fn();
     }
 };
@@ -410,8 +435,9 @@ template <> struct BuiltinCallerImpl<Value* (Value*)> : public BuiltinCaller
 {
     Value* (*fn)(Value*);
     BuiltinCallerImpl(Value* (*fn)(Value*)): fn(fn) {}
-    virtual Value* call(Value* args)
+    virtual Value* call(char const* fn_name, Value* args)
     {
+		builtin_check_args(fn_name, 1, args);
         return fn(car_b(args));
     }
 };
@@ -420,11 +446,9 @@ template <> struct BuiltinCallerImpl<Value* (Value*, Value*)> : public BuiltinCa
 {
     Value* (*fn)(Value*, Value*);
     BuiltinCallerImpl(Value* (*fn)(Value*, Value*)): fn(fn) {}
-    virtual Value* call(Value* args)
+    virtual Value* call(char const* fn_name, Value* args)
     {
-        printf("hello %p ", fn);
-        debug_print(args);
-        puts("");
+		builtin_check_args(fn_name, 2, args);
         return fn(car_b(args), cadr_b(args));
     }
 };
@@ -433,8 +457,10 @@ char const* builtin_type = "builtin";
 struct Builtin : public Value
 {
     BuiltinCaller* caller;
+	char const* name;
 
-    template <typename S> Builtin(S* fn) : Value(builtin_type), caller(new BuiltinCallerImpl<S>(fn)) {}
+    template <typename S> Builtin(S* fn, char const* name)
+		: Value(builtin_type), caller(new BuiltinCallerImpl<S>(fn)), name(name) {}
     ~Builtin() {delete caller;}
 };
 
@@ -447,7 +473,8 @@ Value* call_builtin(Value* bi, Value* args)
 {
     assert(builtinp_b(bi));
     BuiltinCaller* caller = ((Builtin*)bi)->caller;
-    return caller->call(args);
+	char const* name = ((Builtin*)bi)->name;
+    return caller->call(name, args);
 }
 
 Value* builtins = nil;
@@ -459,7 +486,7 @@ void push_builtin(char const* name, Value* val)
 
 template <typename S> Value* define_builtin_fn(char const* name, S fn)
 {
-    push_builtin(name, new Builtin(fn));
+    push_builtin(name, new Builtin(fn, name));
     return symbol_b(name);
 }
 
@@ -517,10 +544,13 @@ Value* evaluate_b(Value* env, Value* expr)
     }
 }
 
-Handle prog = cons((str("a"), str("b")));
+//Handle prog = cons((str("a"), str("b")));
+Handle prog = cons(str("a"), str("b"));
 
 int main()
 {
+		debug_print(prog);
+		puts("");
     debug_print(evaluate_b(builtins, prog));
     puts("");
     return 0;
