@@ -177,7 +177,7 @@ bool stringp_b(Value* x)
 	return x->type == string_type;
 }
 
-Value* str_b(char const* text)
+Value* str(char const* text)
 {
 	using namespace std;
 
@@ -197,7 +197,7 @@ Value* str_b(char const* text)
 Value* symbol_name_b(Value* sym)
 {
 	assert(symbolp_b(sym));
-	return str_b(((Symbol*)sym)->sym);
+	return str(((Symbol*)sym)->sym);
 }
 
 const char* text(Value* s)
@@ -213,7 +213,7 @@ Value* concatenate_b(Value* l, Value* r)
 	char* buf = new char [strlen(tl) + strlen(tr) + 1];
 	strcpy(buf, tl);
 	strcat(buf, tr);
-	Value* res = str_b(buf);
+	Value* res = str(buf);
 	delete [] buf;
 	return res;
 }
@@ -312,73 +312,6 @@ Value* uqs_b(Value* expr)
 	return list_b(symbol_b("unquote-splicing"), expr);
 }
 
-struct BuiltinCaller
-{
-    virtual Value* call(Value* args) = 0;
-};
-
-template <typename S> struct BuiltinCallerImpl {};
-
-template <> struct BuiltinCallerImpl<Value* ()> : public BuiltinCaller
-{
-    Value* (*fn)();
-    BuiltinCallerImpl(Value* (*fn)()): fn(fn) {}
-    virtual Value* call(Value* args)
-    {
-        return fn();
-    }
-};
-
-template <> struct BuiltinCallerImpl<Value* (Value*)> : public BuiltinCaller
-{
-    Value* (*fn)(Value*);
-    BuiltinCallerImpl(Value* (*fn)(Value*)): fn(fn) {}
-    virtual Value* call(Value* args)
-    {
-        return fn(car_b(args));
-    }
-};
-
-template <> struct BuiltinCallerImpl<Value* (Value*, Value*)> : public BuiltinCaller
-{
-    Value* (*fn)(Value*, Value*);
-    BuiltinCallerImpl(Value* (*fn)(Value*, Value*)): fn(fn) {}
-    virtual Value* call(Value* args)
-    {
-        return fn(car_b(args), cadr_b(args));
-    }
-};
-
-char const* builtin_type = "builtin";
-struct Builtin : public Value
-{
-    BuiltinCaller* caller;
-
-    template <typename S> Builtin(S* fn) : Value(builtin_type), caller(new BuiltinCallerImpl<S>(fn)) {}
-    ~Builtin() {delete caller;}
-};
-
-bool builtinp(Value* x)
-{
-	return x->type == symbol_type;
-}
-
-Value* builtins = nil;
-
-void push_builtin(char const* name, Value* val)
-{
-    builtins = cons_b(list_b(symbol_b(name), val), builtins);
-}
-
-template <typename S> Value* define_builtin_fn(char const* name, S fn)
-{
-    push_builtin(name, new Builtin(fn));
-    return symbol_b(name);
-}
-
-#define BUILTIN(n) Handle n(define_builtin_fn(#n, n##_b))
-BUILTIN(cons);
-
 #include <set>
 #define FORMAT(x) do \
 {char const* s = (x); strcpy(buf, s); buf += strlen(s);} while(0)
@@ -456,11 +389,139 @@ char* debug_format(Value* x)
 	return buffer;
 }
 
-Handle prog = cons("a", "b");
+struct BuiltinCaller
+{
+    virtual Value* call(Value* args) = 0;
+};
+
+template <typename S> struct BuiltinCallerImpl {};
+
+template <> struct BuiltinCallerImpl<Value* ()> : public BuiltinCaller
+{
+    Value* (*fn)();
+    BuiltinCallerImpl(Value* (*fn)()): fn(fn) {}
+    virtual Value* call(Value* args)
+    {
+        return fn();
+    }
+};
+
+template <> struct BuiltinCallerImpl<Value* (Value*)> : public BuiltinCaller
+{
+    Value* (*fn)(Value*);
+    BuiltinCallerImpl(Value* (*fn)(Value*)): fn(fn) {}
+    virtual Value* call(Value* args)
+    {
+        return fn(car_b(args));
+    }
+};
+
+template <> struct BuiltinCallerImpl<Value* (Value*, Value*)> : public BuiltinCaller
+{
+    Value* (*fn)(Value*, Value*);
+    BuiltinCallerImpl(Value* (*fn)(Value*, Value*)): fn(fn) {}
+    virtual Value* call(Value* args)
+    {
+        printf("hello %p ", fn);
+        debug_print(args);
+        puts("");
+        return fn(car_b(args), cadr_b(args));
+    }
+};
+
+char const* builtin_type = "builtin";
+struct Builtin : public Value
+{
+    BuiltinCaller* caller;
+
+    template <typename S> Builtin(S* fn) : Value(builtin_type), caller(new BuiltinCallerImpl<S>(fn)) {}
+    ~Builtin() {delete caller;}
+};
+
+bool builtinp_b(Value* x)
+{
+	return x->type == builtin_type;
+}
+
+Value* call_builtin(Value* bi, Value* args)
+{
+    assert(builtinp_b(bi));
+    BuiltinCaller* caller = ((Builtin*)bi)->caller;
+    return caller->call(args);
+}
+
+Value* builtins = nil;
+
+void push_builtin(char const* name, Value* val)
+{
+    builtins = cons_b(list_b(symbol_b(name), val), builtins);
+}
+
+template <typename S> Value* define_builtin_fn(char const* name, S fn)
+{
+    push_builtin(name, new Builtin(fn));
+    return symbol_b(name);
+}
+
+#define BUILTIN(n) Handle n(define_builtin_fn(#n, n##_b))
+BUILTIN(cons);
+
+Value* assoc_b(Value* a, Value* x)
+{
+    if (a == nil)
+        return nil;
+    if (car_b(car_b(a)) == x)
+        return car_b(a);
+    return assoc_b(cdr_b(a), x);
+}
+
+Value* evaluate_b(Value* env, Value* expr);
+
+Value* map_evaluate(Value* env, Value* list)
+{
+    if (list == nil)
+        return nil;
+    return cons_b(evaluate_b(env, car_b(list)), map_evaluate(env, cdr_b(list)));
+}
+
+Value* evaluate_b(Value* env, Value* expr)
+{
+    if (stringp_b(expr))
+    {
+        return expr;
+    }
+    else if (symbolp_b(expr))
+    {
+        Value* entry = assoc_b(env, expr);
+        if (entry == nil)
+        {
+            printf("Undefined symbol ");
+            debug_print(expr);
+            printf("\n");
+            exit(1);
+        }
+        return cadr_b(entry);
+    }
+    else if (listp_b(expr))
+    {
+        Value* args = map_evaluate(env, expr);
+        if (builtinp_b(car_b(args)))
+            return call_builtin(car_b(args), cdr_b(args));
+        else
+            assert(0);
+        return nil;
+    }
+    else
+    {
+        return nil;
+    }
+}
+
+Handle prog = cons((str("a"), str("b")));
 
 int main()
 {
-    debug_print(prog);
+    debug_print(evaluate_b(builtins, prog));
     puts("");
     return 0;
 }
