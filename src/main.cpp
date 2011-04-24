@@ -311,83 +311,6 @@ Value* uqs_b(Value* expr)
 	return list_b(symbol_b("unquote-splicing"), expr);
 }
 
-#include <set>
-#define FORMAT(x) do \
-{char const* s = (x); strcpy(buf, s); buf += strlen(s);} while(0)
-void debug_format_recurse(
-		char*& buf, Value* x, std::set<Value*>& printed_cells)
-{
-	if (0 == x)
-	{
-		FORMAT("()");
-	}
-	else if (_f == x)
-	{
-		FORMAT("_f");
-	}
-	else if (consp_b(x))
-	{
-		if (printed_cells.find(x) != printed_cells.end())
-		{
-			FORMAT("(...)");
-		}
-		else
-		{
-			printed_cells.insert(x);
-
-			FORMAT("(");
-			for (Value* l = x; l; l = cdr_b(l))
-			{
-				if (consp_b(l))
-				{
-					debug_format_recurse(buf, car_b(l), printed_cells);
-					if (cdr_b(l))
-						FORMAT(" ");
-				}
-				else
-				{
-					FORMAT(" . ");
-					debug_format_recurse(buf, l, printed_cells);
-					break;
-				}
-			}
-			FORMAT(")");
-		}
-	}
-	else if (symbolp_b(x))
-	{
-		char const* str = ((Symbol*)x)->sym;
-		FORMAT(str);
-	}
-	else if (stringp_b(x))
-	{
-		FORMAT(text(x));
-	}
-}
-#undef FORMAT
-
-void debug_print(Value* x)
-{
-	char buffer[1000000];
-	char* buf = buffer;
-
-	std::set<Value*> printed_cells;
-
-	debug_format_recurse(buf, x, printed_cells);
-	fputs(buffer, stdout);
-}
-
-char* debug_format(Value* x)
-{
-	static char buffer[1000000];
-	char* buf = buffer;
-
-	std::set<Value*> printed_cells;
-
-	debug_format_recurse(buf, x, printed_cells);
-	return buffer;
-}
-
 struct BuiltinCaller
 {
     virtual Value* call(char const* fn_name, Value* args) = 0;
@@ -486,8 +409,9 @@ void push_builtin(char const* name, Value* val)
 
 template <typename S> Value* define_builtin_fn(char const* name, S fn)
 {
-    push_builtin(name, new Builtin(fn, name));
-    return symbol_b(name);
+	Value* builtin = new Builtin(fn, name);
+	push_builtin(name, builtin);
+	return q_b(builtin);
 }
 
 #define BUILTIN(n) Handle n(define_builtin_fn(#n, n##_b))
@@ -511,6 +435,88 @@ Value* map_evaluate(Value* env, Value* list)
     return cons_b(evaluate_b(env, car_b(list)), map_evaluate(env, cdr_b(list)));
 }
 
+#include <set>
+#define FORMAT(x) do \
+{char const* s = (x); strcpy(buf, s); buf += strlen(s);} while(0)
+void debug_format_recurse(
+		char*& buf, Value* x, std::set<Value*>& printed_cells)
+{
+	if (0 == x)
+	{
+		FORMAT("()");
+	}
+	else if (_f == x)
+	{
+		FORMAT("_f");
+	}
+	else if (consp_b(x))
+	{
+		if (printed_cells.find(x) != printed_cells.end())
+		{
+			FORMAT("(...)");
+		}
+		else
+		{
+			printed_cells.insert(x);
+
+			FORMAT("(");
+			for (Value* l = x; l; l = cdr_b(l))
+			{
+				if (consp_b(l))
+				{
+					debug_format_recurse(buf, car_b(l), printed_cells);
+					if (cdr_b(l))
+						FORMAT(" ");
+				}
+				else
+				{
+					FORMAT(" . ");
+					debug_format_recurse(buf, l, printed_cells);
+					break;
+				}
+			}
+			FORMAT(")");
+		}
+	}
+	else if (symbolp_b(x))
+	{
+		char const* str = ((Symbol*)x)->sym;
+		FORMAT(str);
+	}
+	else if (stringp_b(x))
+	{
+		FORMAT(text(x));
+	}
+	else if (builtinp_b(x))
+	{
+		char const* name = ((Builtin*)x)->name;
+		FORMAT(name);
+	}
+}
+#undef FORMAT
+
+void debug_print(Value* x)
+{
+	char buffer[1000000];
+	char* buf = buffer;
+
+	std::set<Value*> printed_cells;
+
+	debug_format_recurse(buf, x, printed_cells);
+	fputs(buffer, stdout);
+}
+
+char* debug_format(Value* x)
+{
+	static char buffer[1000000];
+	char* buf = buffer;
+
+	std::set<Value*> printed_cells;
+
+	debug_format_recurse(buf, x, printed_cells);
+	return buffer;
+}
+
 Value* evaluate_b(Value* env, Value* expr)
 {
     if (stringp_b(expr))
@@ -531,11 +537,21 @@ Value* evaluate_b(Value* env, Value* expr)
     }
     else if (listp_b(expr))
     {
-        Value* args = map_evaluate(env, expr);
-        if (builtinp_b(car_b(args)))
-            return call_builtin(car_b(args), cdr_b(args));
+		if (car_b(expr) == symbol_b("quote"))
+		{
+			builtin_check_args("quote", 1, cdr_b(expr));
+			return cadr_b(expr);
+		}
+		Value* header = evaluate_b(env, car_b(expr));
+        if (builtinp_b(header))
+		{
+			Value* args = map_evaluate(env, cdr_b(expr));
+            return call_builtin(header, args);
+		}
         else
+		{
             assert(0);
+		}
         return nil;
     }
     else
