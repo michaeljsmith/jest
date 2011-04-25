@@ -320,6 +320,32 @@ namespace jest
 		return cons(car(l), append(cdr(l), r));
 	}
 
+	Value* make_lambda(Value* prm, Value* expr, Value* env)
+	{
+		return list(make_symbol("@lambda"), prm, expr, env);
+	}
+
+	bool is_lambda(Value* x)
+	{
+		return is_cons(x) && car(x) == make_symbol("@lambda");
+	}
+
+	Value* lambda_prm(Value* lmb)
+	{
+		assert(is_lambda(lmb));
+		return cadr(lmb);
+	}
+
+	Value* lambda_expr(Value* lmb)
+	{
+		return caddr(lmb);
+	}
+
+	Value* lambda_env(Value* lmb)
+	{
+		return cadddr(lmb);
+	}
+
 	namespace detail
 	{
 		Value* reverse_helper(Value* l, Value* x)
@@ -374,7 +400,7 @@ namespace jest
 		operator Value*() {return x;}
 
 		Value* operator()() {return list(x);}
-		template <typename X0> Value* operator()(X0 const& x0) {assert(0);return list(x, handle(x0));}
+		template <typename X0> Value* operator()(X0 const& x0) {return list(x, handle(x0));}
 		template <typename X0, typename X1> Value* operator()(X0 const& x0, X1 const& x1) {return list(x, handle(x0), handle(x1));}
 		template <typename X0, typename X1, typename X2> Value* operator()(X0 const& x0, X1 const& x1, X2 const& x2) {return list(x, handle(x0), handle(x1), handle(x2));}
 		template <typename X0, typename X1, typename X2, typename X3> Value* operator()(X0 const& x0, X1 const& x1, X2 const& x2, X3 const& x3) {return list(x, handle(x0), handle(x1), handle(x2), handle(x3));}
@@ -469,10 +495,19 @@ namespace jest
 
 	Value* builtins = nil;
 
-	void push_builtin(char const* name, Value* val)
+	Value* push_builtin(char const* name, Value* val)
 	{
 		builtins = cons(list(make_symbol(name), val), builtins);
+		return val;
 	}
+
+	//template <typename S> struct BuiltinWrapperDefiner {};
+	//template <typename X0> struct BuiltinWrapperDefiner<Value* (X0)>
+	//{
+	//	Value* operator()(Value* (* fn)(X0))
+	//	{
+	//		return list(
+	//};
 
 	template <typename S> Value* define_builtin_fn(char const* name, S fn)
 	{
@@ -516,6 +551,11 @@ namespace jest
 	BUILTIN(assoc);
 	BUILTIN(evaluate);
 #undef BUILTIN
+
+	namespace dsl
+	{
+		Handle foo(jest::q(push_builtin("foo", make_lambda(make_symbol("bar"), cons(make_symbol("bar"), make_symbol("bar")), builtins))));
+	}
 
 	Value* map_evaluate(Value* env, Value* list)
 	{
@@ -630,11 +670,36 @@ namespace jest
 				builtin_check_args("quote", 1, cdr(expr));
 				return cadr(expr);
 			}
+
+			if (car(expr) == make_symbol("#lambda"))
+			{
+				builtin_check_args("lambda", 3, cdr(expr));
+				return make_lambda(cadr(expr), caddr(expr), cadddr(expr));
+			}
+
 			Value* header = evaluate(env, car(expr));
-			if (builtinp(header))
+			if (is_builtin(header))
 			{
 				Value* args = map_evaluate(env, cdr(expr));
 				return call_builtin(header, args);
+			}
+			else if (is_lambda(header))
+			{
+				if (!is_cons(cdr(expr)))
+				{
+					printf("Not enough args for lambda\n");
+					exit(1);
+				}
+
+				Value* arg = evaluate(env, cadr(expr));
+				Value* prm = lambda_prm(header);
+				Value* subexpr = lambda_expr(header);
+				Value* subenv = lambda_env(header);
+				Value* rslt = evaluate(cons(list(prm, arg), subenv), subexpr);
+				Value* rest = cddr(expr);
+				if (rest == nil)
+					return rslt;
+				return evaluate(env, cons(q(rslt), rest));
 			}
 			else
 			{
@@ -649,11 +714,11 @@ namespace jest
 	}
 }
 
-//Handle prog = cons((str("a"), str("b")));
 namespace prgm
 {
 	using namespace jest::dsl;
-	jest::Handle prog = cons(str("a"), str("b"));
+	//jest::Handle prog = cons(str("a"), str("b"));
+	jest::Handle prog = foo(str("a"));
 }
 using prgm::prog;
 
