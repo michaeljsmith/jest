@@ -7,151 +7,156 @@
 #include <string>
 #include <set>
 
-struct Value
+namespace jest
 {
-	Value(void const* type): type(type) {}
-	void const* type;
-};
-
-Value* nil = 0;
-
-char const* cell_type = "cell";
-struct Cell : public Value
-{
-	Cell(Value* head, Value* tail):
-		Value(cell_type), head(head), tail(tail) {}
-
-	Value* head;
-	Value* tail;
-};
-
-char const* symbol_type = "symbol";
-struct Symbol : public Value
-{
-	Symbol(char const* sym): Value(symbol_type)
+	struct Value
 	{
-		this->sym = (char*)malloc(strlen(sym) + 1);
-		strcpy(this->sym, sym);
+		Value(void const* type): type(type) {}
+		void const* type;
+	};
+
+	Value* nil = 0;
+
+	char const* cell_type = "cell";
+	struct Cell : public Value
+	{
+		Cell(Value* head, Value* tail):
+			Value(cell_type), head(head), tail(tail) {}
+
+		Value* head;
+		Value* tail;
+	};
+
+	char const* symbol_type = "symbol";
+	struct Symbol : public Value
+	{
+		Symbol(char const* sym): Value(symbol_type)
+		{
+			this->sym = (char*)malloc(strlen(sym) + 1);
+			strcpy(this->sym, sym);
+		}
+
+		char* sym;
+	};
+
+	char const* string_type = "string";
+	struct String : public Value
+	{
+		String(char const* text): Value(string_type)
+		{
+			this->text = (char*)malloc(strlen(text) + 1);
+			strcpy(this->text, text);
+		}
+
+		char* text;
+	};
+
+	struct BuiltinCaller;
+	char const* builtin_type = "builtin";
+	struct Builtin : public Value
+	{
+		BuiltinCaller* caller;
+		char const* name;
+
+		template <typename S> Builtin(S* fn, char const* name);
+		~Builtin();
+	};
+
+	Value* make_symbol(char const* s)
+	{
+		using namespace std;
+
+		typedef map<string, Value*> SymMap;
+		static SymMap symbol_map;
+		string str(s);
+		SymMap::iterator pos = symbol_map.find(str);
+		if (pos == symbol_map.end())
+		{
+			Value* symbol = new Symbol(s);
+			pos = symbol_map.insert(make_pair(str, symbol)).first;
+		}
+
+		return (*pos).second;
 	}
 
-	char* sym;
-};
-
-char const* string_type = "string";
-struct String : public Value
-{
-	String(char const* text): Value(string_type)
+	Value* make_cons(Value* head, Value* tail)
 	{
-		this->text = (char*)malloc(strlen(text) + 1);
-		strcpy(this->text, text);
+		using namespace std;
+
+		typedef map<std::pair<Value*, Value*>, Value*> CellMap;
+		static CellMap cell_map;
+		CellMap::iterator pos = cell_map.find(make_pair(head, tail));
+		if (pos == cell_map.end())
+		{
+			Value* cell = new Cell(head, tail);
+			pos = cell_map.insert(make_pair(make_pair(head, tail), cell)).first;
+		}
+
+		return (*pos).second;
 	}
 
-	char* text;
-};
-
-namespace impl {struct BuiltinCaller;}
-char const* builtin_type = "builtin";
-struct Builtin : public Value
-{
-	impl::BuiltinCaller* caller;
-	char const* name;
-
-	template <typename S> Builtin(S* fn, char const* name);
-	~Builtin();
-};
-
-Value* make_symbol(char const* s)
-{
-	using namespace std;
-
-	typedef map<string, Value*> SymMap;
-	static SymMap symbol_map;
-	string str(s);
-	SymMap::iterator pos = symbol_map.find(str);
-	if (pos == symbol_map.end())
+	namespace utils
 	{
-		Value* symbol = new Symbol(s);
-		pos = symbol_map.insert(make_pair(str, symbol)).first;
+		Value* _f = make_symbol("_f");
+		Value* _t = make_symbol("_t");
+
+		Value* str(char const* text)
+		{
+			using namespace std;
+
+			typedef map<string, Value*> SymMap;
+			static SymMap symbol_map;
+			string str(text);
+			SymMap::iterator pos = symbol_map.find(str);
+			if (pos == symbol_map.end())
+			{
+				Value* symbol = new String(text);
+				pos = symbol_map.insert(make_pair(str, symbol)).first;
+			}
+
+			return (*pos).second;
+		}
 	}
 
-	return (*pos).second;
-}
+	using namespace utils;
 
-Value* make_cons(Value* head, Value* tail)
-{
-	using namespace std;
-
-	typedef map<std::pair<Value*, Value*>, Value*> CellMap;
-	static CellMap cell_map;
-	CellMap::iterator pos = cell_map.find(make_pair(head, tail));
-	if (pos == cell_map.end())
+	bool is_cons(Value* x)
 	{
-		Value* cell = new Cell(head, tail);
-		pos = cell_map.insert(make_pair(make_pair(head, tail), cell)).first;
+		return x->type == cell_type;
 	}
 
-	return (*pos).second;
-}
-
-Value* _f = make_symbol("_f");
-Value* _t = make_symbol("_t");
-
-bool is_cons(Value* x)
-{
-	return x->type == cell_type;
-}
-
-bool is_list(Value* x)
-{
-	return 0 == x || is_cons(x);
-}
-
-bool is_string(Value* x)
-{
-	return x->type == string_type;
-}
-
-const char* text(Value* s)
-{
-	assert(is_string(s));
-	return ((String*)s)->text;
-}
-
-bool is_symbol(Value* x)
-{
-	return x->type == symbol_type;
-}
-
-const char* get_symbol_text(Value* symbol)
-{
-	assert(is_symbol(symbol));
-	return ((Symbol*)symbol)->sym;
-}
-
-bool is_builtin(Value* x)
-{
-	return x->type == builtin_type;
-}
-
-Value* str(char const* text)
-{
-	using namespace std;
-
-	typedef map<string, Value*> SymMap;
-	static SymMap symbol_map;
-	string str(text);
-	SymMap::iterator pos = symbol_map.find(str);
-	if (pos == symbol_map.end())
+	bool is_list(Value* x)
 	{
-		Value* symbol = new String(text);
-		pos = symbol_map.insert(make_pair(str, symbol)).first;
+		return 0 == x || is_cons(x);
 	}
 
-	return (*pos).second;
-}
+	bool is_string(Value* x)
+	{
+		return x->type == string_type;
+	}
 
-namespace impl
-{
+	const char* text(Value* s)
+	{
+		assert(is_string(s));
+		return ((String*)s)->text;
+	}
+
+	bool is_symbol(Value* x)
+	{
+		return x->type == symbol_type;
+	}
+
+	const char* get_symbol_text(Value* symbol)
+	{
+		assert(is_symbol(symbol));
+		return ((Symbol*)symbol)->sym;
+	}
+
+	bool is_builtin(Value* x)
+	{
+		return x->type == builtin_type;
+	}
+
 	Value* cons(Value* head, Value* tail)
 	{
 		return make_cons(head, tail);
@@ -361,11 +366,6 @@ namespace impl
 	}
 
 	Value* evaluate(Value* env, Value* expr);
-}
-
-namespace detail
-{
-	using namespace impl;
 
 	struct Handle
 	{
@@ -385,11 +385,7 @@ namespace detail
 
 		Handle(Value* x): x(x) {}
 	};
-}
-using detail::Handle;
 
-namespace impl
-{
 	Handle handle(Value* x) {return Handle(x);}
 	Handle handle(char const* x) {return Handle(make_symbol(x));}
 
@@ -458,16 +454,11 @@ namespace impl
 			return fn(car(args), cadr(args));
 		}
 	};
-}
 
-using impl::BuiltinCallerImpl;
-
-template <typename S> Builtin::Builtin(S* fn, char const* name)
-	: Value(builtin_type), caller(new BuiltinCallerImpl<S>(fn)), name(name) {}
+	template <typename S> Builtin::Builtin(S* fn, char const* name)
+			: Value(builtin_type), caller(new BuiltinCallerImpl<S>(fn)), name(name) {}
 	Builtin::~Builtin() {delete caller;}
 
-	namespace impl
-{
 	Value* call_builtin(Value* bi, Value* args)
 	{
 		assert(builtinp(bi));
@@ -475,12 +466,9 @@ template <typename S> Builtin::Builtin(S* fn, char const* name)
 		char const* name = ((Builtin*)bi)->name;
 		return caller->call(name, args);
 	}
-}
 
-Value* builtins = nil;
+	Value* builtins = nil;
 
-namespace impl
-{
 	void push_builtin(char const* name, Value* val)
 	{
 		builtins = cons(list(make_symbol(name), val), builtins);
@@ -492,43 +480,43 @@ namespace impl
 		push_builtin(name, builtin);
 		return q(builtin);
 	}
-}
 
-using detail::define_builtin_fn;
+	namespace dsl
+	{
+		using namespace utils;
+	}
 
-#define BUILTIN(n) namespace prim {Handle n(define_builtin_fn(#n, impl::n));}
-BUILTIN(cons);
-BUILTIN(consp);
-BUILTIN(listp);
-BUILTIN(symbol);
-BUILTIN(gensym);
-BUILTIN(symbolp);
-BUILTIN(builtinp);
-BUILTIN(symbol_text);
-BUILTIN(stringp);
-BUILTIN(symbol_name);
-BUILTIN(concatenate);
-BUILTIN(car);
-BUILTIN(cdr);
-BUILTIN(cadr);
-BUILTIN(cddr);
-BUILTIN(caddr);
-BUILTIN(cdddr);
-BUILTIN(cadddr);
-BUILTIN(cddddr);
-BUILTIN(caddddr);
-BUILTIN(append);
-BUILTIN(reverse);
-BUILTIN(q);
-BUILTIN(qq);
-BUILTIN(uq);
-BUILTIN(uqs);
-BUILTIN(assoc);
-BUILTIN(evaluate);
+#define BUILTIN(n) namespace dsl {Handle n(define_builtin_fn(#n, jest::n));}
+	BUILTIN(cons);
+	BUILTIN(consp);
+	BUILTIN(listp);
+	BUILTIN(symbol);
+	BUILTIN(gensym);
+	BUILTIN(symbolp);
+	BUILTIN(builtinp);
+	BUILTIN(symbol_text);
+	BUILTIN(stringp);
+	BUILTIN(symbol_name);
+	BUILTIN(concatenate);
+	BUILTIN(car);
+	BUILTIN(cdr);
+	BUILTIN(cadr);
+	BUILTIN(cddr);
+	BUILTIN(caddr);
+	BUILTIN(cdddr);
+	BUILTIN(cadddr);
+	BUILTIN(cddddr);
+	BUILTIN(caddddr);
+	BUILTIN(append);
+	BUILTIN(reverse);
+	BUILTIN(q);
+	BUILTIN(qq);
+	BUILTIN(uq);
+	BUILTIN(uqs);
+	BUILTIN(assoc);
+	BUILTIN(evaluate);
 #undef BUILTIN
 
-namespace impl
-{
 	Value* map_evaluate(Value* env, Value* list)
 	{
 		if (list == nil)
@@ -616,10 +604,7 @@ namespace impl
 		debug_format_recurse(buf, x, printed_cells);
 		return buffer;
 	}
-}
 
-namespace impl
-{
 	Value* evaluate(Value* env, Value* expr)
 	{
 		if (stringp(expr))
@@ -667,14 +652,14 @@ namespace impl
 //Handle prog = cons((str("a"), str("b")));
 namespace prgm
 {
-	using namespace prim;
-	Handle prog = cons(str("a"), str("b"));
+	using namespace jest::dsl;
+	jest::Handle prog = cons(str("a"), str("b"));
 }
 using prgm::prog;
 
 int main()
 {
-	using namespace impl;
+	using namespace jest;
 
 	debug_print(prog);
 	puts("");
