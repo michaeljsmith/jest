@@ -7,7 +7,7 @@
 #include <string>
 #include <set>
 
-namespace jest
+namespace detail
 {
 	struct Value
 	{
@@ -51,18 +51,25 @@ namespace jest
 		char* text;
 	};
 
-	struct BuiltinCaller;
 	char const* builtin_type = "builtin";
+	typedef Value* (* BuiltinFn)(Value* env, Value* args);
 	struct Builtin : public Value
 	{
-		BuiltinCaller* caller;
+		BuiltinFn fn;
 		char const* name;
 
-		template <typename S> Builtin(S* fn, char const* name);
-		~Builtin();
+		Builtin(BuiltinFn fn, char const* name)
+			: Value(builtin_type), fn(fn), name(name) {}
 	};
+}
 
-	Value* make_symbol(char const* s)
+namespace jest
+{
+	using namespace detail;
+
+	Value* nil = 0;
+
+	Value* symbol(char const* s)
 	{
 		using namespace std;
 
@@ -79,7 +86,7 @@ namespace jest
 		return (*pos).second;
 	}
 
-	Value* make_cons(Value* head, Value* tail)
+	Value* cons(Value* head, Value* tail)
 	{
 		using namespace std;
 
@@ -97,8 +104,8 @@ namespace jest
 
 	namespace utils
 	{
-		Value* _f = make_symbol("_f");
-		Value* _t = make_symbol("_t");
+		Value* _f = symbol("_f");
+		Value* _t = symbol("_t");
 
 		Value* str(char const* text)
 		{
@@ -120,56 +127,35 @@ namespace jest
 
 	using namespace utils;
 
-	bool is_cons(Value* x)
+	bool consp(Value* x)
 	{
 		return x->type == cell_type;
 	}
 
-	bool is_list(Value* x)
+	bool listp(Value* x)
 	{
-		return 0 == x || is_cons(x);
+		return 0 == x || consp(x);
 	}
 
-	bool is_string(Value* x)
+	bool stringp(Value* x)
 	{
 		return x->type == string_type;
 	}
 
 	const char* text(Value* s)
 	{
-		assert(is_string(s));
+		assert(stringp(s));
 		return ((String*)s)->text;
 	}
 
-	bool is_symbol(Value* x)
+	bool symbolp(Value* x)
 	{
 		return x->type == symbol_type;
 	}
 
-	const char* get_symbol_text(Value* symbol)
-	{
-		assert(is_symbol(symbol));
-		return ((Symbol*)symbol)->sym;
-	}
-
-	bool is_builtin(Value* x)
+	bool builtinp(Value* x)
 	{
 		return x->type == builtin_type;
-	}
-
-	Value* cons(Value* head, Value* tail)
-	{
-		return make_cons(head, tail);
-	}
-
-	Value* consp(Value* x)
-	{
-		return is_cons(x) ? _t : nil;
-	}
-
-	Value* listp(Value* x)
-	{
-		return is_list(x) ? _t : nil;
 	}
 
 	Value* list()
@@ -209,8 +195,8 @@ namespace jest
 
 	Value* symbol(Value* s)
 	{
-		assert(is_string(s));
-		return make_symbol(((String*)s)->text);
+		assert(stringp(s));
+		return symbol(((String*)s)->text);
 	}
 
 	Value* gensym()
@@ -218,33 +204,7 @@ namespace jest
 		static int next_id = 100;
 		char str[1024];
 		sprintf(str, "@gensym%d", next_id++);
-		return make_symbol(str);
-	}
-
-	Value* symbolp(Value* x)
-	{
-		return is_symbol(x) ? _t : nil;
-	}
-
-	Value* builtinp(Value* x)
-	{
-		return is_builtin(x) ? _t : nil;
-	}
-
-	Value* symbol_text(Value* symbol)
-	{
-		return str(get_symbol_text(symbol));
-	}
-
-	Value* stringp(Value* x)
-	{
-		return is_string(x) ? _t : nil;
-	}
-
-	Value* symbol_name(Value* sym)
-	{
-		assert(symbolp(sym));
-		return str(((Symbol*)sym)->sym);
+		return symbol(str);
 	}
 
 	Value* concatenate(Value* l, Value* r)
@@ -320,32 +280,6 @@ namespace jest
 		return cons(car(l), append(cdr(l), r));
 	}
 
-	Value* make_lambda(Value* prm, Value* expr, Value* env)
-	{
-		return list(make_symbol("@lambda"), prm, expr, env);
-	}
-
-	bool is_lambda(Value* x)
-	{
-		return is_cons(x) && car(x) == make_symbol("@lambda");
-	}
-
-	Value* lambda_prm(Value* lmb)
-	{
-		assert(is_lambda(lmb));
-		return cadr(lmb);
-	}
-
-	Value* lambda_expr(Value* lmb)
-	{
-		return caddr(lmb);
-	}
-
-	Value* lambda_env(Value* lmb)
-	{
-		return cadddr(lmb);
-	}
-
 	namespace detail
 	{
 		Value* reverse_helper(Value* l, Value* x)
@@ -364,22 +298,22 @@ namespace jest
 
 	Value* q(Value* expr)
 	{
-		return list(make_symbol("quote"), expr);
+		return list(symbol("quote"), expr);
 	}
 
 	Value* qq(Value* expr)
 	{
-		return list(make_symbol("quasiquote"), expr);
+		return list(symbol("quasiquote"), expr);
 	}
 
 	Value* uq(Value* expr)
 	{
-		return list(make_symbol("unquote"), expr);
+		return list(symbol("unquote"), expr);
 	}
 
 	Value* uqs(Value* expr)
 	{
-		return list(make_symbol("unquote-splicing"), expr);
+		return list(symbol("unquote-splicing"), expr);
 	}
 
 	Value* assoc(Value* a, Value* x)
@@ -407,21 +341,13 @@ namespace jest
 		template <typename X0, typename X1, typename X2, typename X3, typename X4> Value* operator()(X0 const& x0, X1 const& x1, X2 const& x2, X3 const& x3, X4 const& x4) {return list(x, handle(x0), handle(x1), handle(x2), handle(x3), handle(x4));}
 		template <typename X0, typename X1, typename X2, typename X3, typename X4, typename X5> Value* operator()(X0 const& x0, X1 const& x1, X2 const& x2, X3 const& x3, X4 const& x4, X5 const& x5) {return list(x, handle(x0), handle(x1), handle(x2), handle(x3), handle(x4), handle(x5));}
 
-		template <typename Idx> Value* operator[](Idx idx) {return list(make_symbol("member"), x, handle(idx));}
+		template <typename Idx> Value* operator[](Idx idx) {return list(symbol("member"), x, handle(idx));}
 
 		Handle(Value* x): x(x) {}
 	};
 
 	Handle handle(Value* x) {return Handle(x);}
-	Handle handle(char const* x) {return Handle(make_symbol(x));}
-
-	struct BuiltinCaller
-	{
-		virtual ~BuiltinCaller() {}
-		virtual Value* call(char const* fn_name, Value* args) = 0;
-	};
-
-	template <typename S> struct BuiltinCallerImpl {};
+	Handle handle(char const* x) {return Handle(symbol(x));}
 
 	void builtin_check_args_recurse(char const* fn_name, int count, Value* args)
 	{
@@ -448,68 +374,49 @@ namespace jest
 		builtin_check_args_recurse(fn_name, count, args);
 	}
 
-	template <> struct BuiltinCallerImpl<Value* ()> : public BuiltinCaller
-	{
-		Value* (*fn)();
-		BuiltinCallerImpl(Value* (*fn)()): fn(fn) {}
-		virtual Value* call(char const* fn_name, Value* args)
-		{
-			builtin_check_args(fn_name, 0, args);
-			return fn();
-		}
-	};
-
-	template <> struct BuiltinCallerImpl<Value* (Value*)> : public BuiltinCaller
-	{
-		Value* (*fn)(Value*);
-		BuiltinCallerImpl(Value* (*fn)(Value*)): fn(fn) {}
-		virtual Value* call(char const* fn_name, Value* args)
-		{
-			builtin_check_args(fn_name, 1, args);
-			return fn(car(args));
-		}
-	};
-
-	template <> struct BuiltinCallerImpl<Value* (Value*, Value*)> : public BuiltinCaller
-	{
-		Value* (*fn)(Value*, Value*);
-		BuiltinCallerImpl(Value* (*fn)(Value*, Value*)): fn(fn) {}
-		virtual Value* call(char const* fn_name, Value* args)
-		{
-			builtin_check_args(fn_name, 2, args);
-			return fn(car(args), cadr(args));
-		}
-	};
-
-	template <typename S> Builtin::Builtin(S* fn, char const* name)
-			: Value(builtin_type), caller(new BuiltinCallerImpl<S>(fn)), name(name) {}
-	Builtin::~Builtin() {delete caller;}
-
-	Value* call_builtin(Value* bi, Value* args)
+	Value* call_builtin(Value* env, Value* bi, Value* args)
 	{
 		assert(builtinp(bi));
-		BuiltinCaller* caller = ((Builtin*)bi)->caller;
-		char const* name = ((Builtin*)bi)->name;
-		return caller->call(name, args);
+		BuiltinFn fn = ((Builtin*)bi)->fn;
+		return fn(env, args);
+	}
+
+	Value* make_fntype(Value* args)
+	{
+		if (args == nil)
+			printf("Missing return type for fntype.");
+		return cons(symbol("#fntype"), args);
+	}
+
+	namespace impl {
+		Value* fntype(Value* env, Value* args)
+		{
+			return make_fntype(args);
+		}
+	}
+
+	bool fntypep(Value* expr)
+	{
+		return consp(expr) && car(expr) == symbol("#fntype");
+	}
+
+	namespace impl {
+		Value* fntypep(Value* env, Value* args)
+		{
+			builtin_check_args("fntypep", 1, args);
+			return jest::fntypep(car(args)) ? _t : _f;
+		}
 	}
 
 	Value* builtins = nil;
 
 	Value* push_builtin(char const* name, Value* val)
 	{
-		builtins = cons(list(make_symbol(name), val), builtins);
+		builtins = cons(list(symbol(name), val), builtins);
 		return val;
 	}
 
-	//template <typename S> struct BuiltinWrapperDefiner {};
-	//template <typename X0> struct BuiltinWrapperDefiner<Value* (X0)>
-	//{
-	//	Value* operator()(Value* (* fn)(X0))
-	//	{
-	//		return list(
-	//};
-
-	template <typename S> Value* define_builtin_fn(char const* name, S fn)
+	Value* define_builtin_fn(char const* name, BuiltinFn fn)
 	{
 		Value* builtin = new Builtin(fn, name);
 		push_builtin(name, builtin);
@@ -521,41 +428,10 @@ namespace jest
 		using namespace utils;
 	}
 
-#define BUILTIN(n) namespace dsl {Handle n(define_builtin_fn(#n, jest::n));}
-	BUILTIN(cons);
-	BUILTIN(consp);
-	BUILTIN(listp);
-	BUILTIN(symbol);
-	BUILTIN(gensym);
-	BUILTIN(symbolp);
-	BUILTIN(builtinp);
-	BUILTIN(symbol_text);
-	BUILTIN(stringp);
-	BUILTIN(symbol_name);
-	BUILTIN(concatenate);
-	BUILTIN(car);
-	BUILTIN(cdr);
-	BUILTIN(cadr);
-	BUILTIN(cddr);
-	BUILTIN(caddr);
-	BUILTIN(cdddr);
-	BUILTIN(cadddr);
-	BUILTIN(cddddr);
-	BUILTIN(caddddr);
-	BUILTIN(append);
-	BUILTIN(reverse);
-	BUILTIN(q);
-	BUILTIN(qq);
-	BUILTIN(uq);
-	BUILTIN(uqs);
-	BUILTIN(assoc);
-	BUILTIN(evaluate);
+#define BUILTIN(n) namespace dsl {Handle n(define_builtin_fn(#n, impl::n));}
+	BUILTIN(fntype);
+	BUILTIN(fntypep);
 #undef BUILTIN
-
-	namespace dsl
-	{
-		Handle foo(jest::q(push_builtin("foo", make_lambda(make_symbol("bar"), cons(make_symbol("bar"), make_symbol("bar")), builtins))));
-	}
 
 	Value* map_evaluate(Value* env, Value* list)
 	{
@@ -606,16 +482,16 @@ namespace jest
 				FORMAT(")");
 			}
 		}
-		else if (is_symbol(x))
+		else if (symbolp(x))
 		{
 			char const* str = ((Symbol*)x)->sym;
 			FORMAT(str);
 		}
-		else if (is_string(x))
+		else if (stringp(x))
 		{
 			FORMAT(text(x));
 		}
-		else if (is_builtin(x))
+		else if (builtinp(x))
 		{
 			char const* name = ((Builtin*)x)->name;
 			FORMAT(name);
@@ -665,41 +541,16 @@ namespace jest
 		}
 		else if (listp(expr))
 		{
-			if (car(expr) == make_symbol("quote"))
+			if (car(expr) == symbol("quote"))
 			{
 				builtin_check_args("quote", 1, cdr(expr));
 				return cadr(expr);
 			}
 
-			if (car(expr) == make_symbol("#lambda"))
-			{
-				builtin_check_args("lambda", 3, cdr(expr));
-				return make_lambda(cadr(expr), caddr(expr), cadddr(expr));
-			}
-
 			Value* header = evaluate(env, car(expr));
-			if (is_builtin(header))
+			if (builtinp(header))
 			{
-				Value* args = map_evaluate(env, cdr(expr));
-				return call_builtin(header, args);
-			}
-			else if (is_lambda(header))
-			{
-				if (!is_cons(cdr(expr)))
-				{
-					printf("Not enough args for lambda\n");
-					exit(1);
-				}
-
-				Value* arg = evaluate(env, cadr(expr));
-				Value* prm = lambda_prm(header);
-				Value* subexpr = lambda_expr(header);
-				Value* subenv = lambda_env(header);
-				Value* rslt = evaluate(cons(list(prm, arg), subenv), subexpr);
-				Value* rest = cddr(expr);
-				if (rest == nil)
-					return rslt;
-				return evaluate(env, cons(q(rslt), rest));
+				return call_builtin(env, header, cdr(expr));
 			}
 			else
 			{
@@ -717,8 +568,8 @@ namespace jest
 namespace prgm
 {
 	using namespace jest::dsl;
-	//jest::Handle prog = cons(str("a"), str("b"));
-	jest::Handle prog = foo(str("a"));
+	//jest::Handle prog = consp(str("a"), str("b"));
+	jest::Handle prog = fntype(str("a"), str("b"));
 }
 using prgm::prog;
 
