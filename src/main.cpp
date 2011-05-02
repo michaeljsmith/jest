@@ -385,10 +385,11 @@ namespace jest
 	{
 		if (args == nil)
 			printf("Missing return type for fntype.");
-		return cons(symbol("#fntype"), args);
+		return list(symbol("#fntype"), args);
 	}
 
-	namespace impl {
+	namespace impl
+	{
 		Value* fntype(Value* env, Value* args)
 		{
 			return make_fntype(args);
@@ -400,11 +401,39 @@ namespace jest
 		return consp(expr) && car(expr) == symbol("#fntype");
 	}
 
-	namespace impl {
+	namespace impl
+	{
 		Value* fntypep(Value* env, Value* args)
 		{
 			builtin_check_args("fntypep", 1, args);
 			return jest::fntypep(car(args)) ? _t : _f;
+		}
+	}
+
+	Value* make_concept(Value* methods)
+	{
+		return list(symbol("#concept"), methods);
+	}
+
+	namespace impl
+	{
+		Value* concept(Value* env, Value* args)
+		{
+			return make_concept(args);
+		}
+	}
+
+	Value* conceptp(Value* expr)
+	{
+		return consp(expr) && car(expr) == symbol("#concept");
+	}
+
+	namespace impl
+	{
+		Value* conceptp(Value* env, Value* args)
+		{
+			builtin_check_args("conceptp", 1, args);
+			return jest::conceptp(car(args)) ? _t : _f;
 		}
 	}
 
