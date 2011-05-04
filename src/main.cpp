@@ -423,7 +423,7 @@ namespace jest
 		}
 	}
 
-	Value* conceptp(Value* expr)
+	bool conceptp(Value* expr)
 	{
 		return consp(expr) && car(expr) == symbol("#concept");
 	}
