@@ -349,6 +349,8 @@ Value code_symbolp(Value context, void* /*data*/, Value argument)
 	return boolean(*box == code_symbol);
 }
 
+Value symbolp = make_combinator(code_symbolp, 0);
+
 //identical
 Value code_identical1(Value context, void* data, Value argument)
 {
@@ -402,6 +404,72 @@ namespace detail
 Value composep = identical * detail::compose_code + codeof;
 ASSERT(false_ == composep * fail);
 ASSERT(true_ == composep * detail::compose_sample1);
+
+//curry
+//Value curry = lambda(f) {lambda(x) {lambda(y) {f * (cons * x * y)}}}
+//            = lambda(f) {lambda(x) {lambda(y) {(f + (cons * x)) * y)}}}
+ASSERT(compose * (cons * false_ * true_) == (compose + (cons * false_)) * true_);
+ASSERT(flip * (cons * fail * compose) == (flip + (cons * fail)) * compose);
+//            = labmda(f) {lambda(x) {f + cons * x}}
+//            = lambda(f) {lambda(x) {compose * f * (cons * x)}}
+ASSERT(compose + cons * true_ == compose * compose * (cons * true_));
+ASSERT(flip + cons * fail == compose * flip * (cons * fail));
+//            = lambda(f) {lambda(x) {compose * (compose * f) * cons * x}}
+ASSERT(compose * compose * (cons * true_) == compose * (compose * compose) * cons * true_);
+ASSERT(compose * flip * (cons * fail) == compose * (compose * flip) * cons * fail);
+//            = lambda(f) {compose * (compose * f) * cons}
+//            = lambda(f) {compose * compose * compose * f * cons}
+ASSERT(compose * (compose * compose) * cons == compose * compose * compose * compose * cons);
+ASSERT(compose * (compose * flip) * cons == compose * compose * compose * flip * cons);
+//            = lambda(f) {flip * (compose * compose * compose) * cons * f}
+ASSERT(compose * compose * compose * compose * cons == flip * (compose * compose * compose) * cons * compose);
+ASSERT(compose * compose * compose * flip * cons == flip * (compose * compose * compose) * cons * flip);
+//            = flip * (compose * compose * compose) * cons
+Value curry = flip * (compose * compose * compose) * cons;
+ASSERT(curry * car * true_ * false_ == true_);
+ASSERT(curry * cdr * true_ * false_ == false_);
+
+//uncurry
+namespace detail
+{
+	Value pair_sample0 = cons * false_ * true_;
+	Value pair_sample1 = cons * true_ * symbolp;
+}
+//Value uncurry = lambda(f) {lambda(p) {f * (car * p) * (cdr * p)}}
+//              = lambda(f) {lambda(p) {compose * f * car * p * (cdr * p)}}
+ASSERT(flip * (car * detail::pair_sample0) * (cdr * detail::pair_sample0) == compose * flip * car * detail::pair_sample0 * (cdr * detail::pair_sample0));
+ASSERT(duplicate * (car * detail::pair_sample1) * (cdr * detail::pair_sample1) == compose * duplicate * car * detail::pair_sample1 * (cdr * detail::pair_sample1));
+//              = lambda(f) {lambda(p) {flip * (compose * f * car) * (cdr * p) * p}}
+ASSERT(compose * flip * car * detail::pair_sample0 * (cdr * detail::pair_sample0) == flip * (compose * flip * car) * (cdr * detail::pair_sample0) * detail::pair_sample0);
+ASSERT(compose * duplicate * car * detail::pair_sample1 * (cdr * detail::pair_sample1) == flip * (compose * duplicate * car) * (cdr * detail::pair_sample1) * detail::pair_sample1);
+//              = lambda(f) {lambda(p) {compose * (flip * (compose * f * car)) * cdr * p * p}}
+ASSERT(flip * (compose * flip * car) * (cdr * detail::pair_sample0) * detail::pair_sample0 == compose * (flip * (compose * flip * car)) * cdr * detail::pair_sample0 * detail::pair_sample0);
+ASSERT(flip * (compose * duplicate * car) * (cdr * detail::pair_sample1) * detail::pair_sample1 == compose * (flip * (compose * duplicate * car)) * cdr * detail::pair_sample1 * detail::pair_sample1);
+//              = lambda(f) {lambda(p) {duplicate * (compose * (flip * (compose * f * car)) * cdr) * p}}
+ASSERT(compose * (flip * (compose * flip * car)) * cdr * detail::pair_sample0 * detail::pair_sample0 == duplicate * (compose * (flip * (compose * flip * car)) * cdr) * detail::pair_sample0);
+ASSERT(compose * (flip * (compose * duplicate * car)) * cdr * detail::pair_sample1 * detail::pair_sample1 == duplicate * (compose * (flip * (compose * duplicate * car)) * cdr) * detail::pair_sample1);
+//
+//              = lambda(f) {duplicate * (compose * (flip * (compose * f * car)) * cdr)}
+//              = lambda(f) {duplicate * (compose * (flip * (flip * compose * car * f)) * cdr)}
+ASSERT(duplicate * (compose * (flip * (compose * flip * car)) * cdr) == duplicate * (compose * (flip * (flip * compose * car * flip)) * cdr));
+ASSERT(duplicate * (compose * (flip * (compose * duplicate * car)) * cdr) == duplicate * (compose * (flip * (flip * compose * car * duplicate)) * cdr));
+//              = lambda(f) {duplicate * (compose * (compose * flip * (flip * compose * car) * f) * cdr)}
+ASSERT(duplicate * (compose * (flip * (flip * compose * car * flip)) * cdr) == duplicate * (compose * (compose * flip * (flip * compose * car) * flip) * cdr));
+ASSERT(duplicate * (compose * (flip * (flip * compose * car * duplicate)) * cdr) == duplicate * (compose * (compose * flip * (flip * compose * car) * duplicate) * cdr));
+//              = lambda(f) {duplicate * (compose * compose * (compose * flip * (flip * compose * car)) * f * cdr)}
+ASSERT(duplicate * (compose * (compose * flip * (flip * compose * car) * flip) * cdr) == duplicate * (compose * compose * (compose * flip * (flip * compose * car)) * flip * cdr));
+ASSERT(duplicate * (compose * (compose * flip * (flip * compose * car) * duplicate) * cdr) == duplicate * (compose * compose * (compose * flip * (flip * compose * car)) * duplicate * cdr));
+//              = lambda(f) {duplicate * (flip * (compose * compose * (compose * flip * (flip * compose * car))) * cdr * f)}
+ASSERT(duplicate * (compose * compose * (compose * flip * (flip * compose * car)) * flip * cdr) == duplicate * (flip * (compose * compose * (compose * flip * (flip * compose * car))) * cdr * flip));
+ASSERT(duplicate * (compose * compose * (compose * flip * (flip * compose * car)) * duplicate * cdr) == duplicate * (flip * (compose * compose * (compose * flip * (flip * compose * car))) * cdr * duplicate));
+//              = lambda(f) {compose * duplicate * (flip * (compose * compose * (compose * flip * (flip * compose * car))) * cdr) * f}
+ASSERT(duplicate * (flip * (compose * compose * (compose * flip * (flip * compose * car))) * cdr * flip) == compose * duplicate * (flip * (compose * compose * (compose * flip * (flip * compose * car))) * cdr) * flip);
+ASSERT(duplicate * (flip * (compose * compose * (compose * flip * (flip * compose * car))) * cdr * duplicate) == compose * duplicate * (flip * (compose * compose * (compose * flip * (flip * compose * car))) * cdr) * duplicate);
+
+Value uncurry = compose * duplicate * (flip * (compose * compose * (compose * flip * (flip * compose * car))) * cdr);
+
+ASSERT(uncurry * true_ * (cons * true_ * false_) == true_);
+ASSERT(uncurry * false_ * (cons * true_ * false_) == false_);
 
 //lambda
 
