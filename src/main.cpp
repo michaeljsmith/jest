@@ -67,8 +67,10 @@ struct Expression
 	typedef std::tr1::shared_ptr<ExpressionNode const> Ptr;
 
 	Expression(Ptr ptr): ptr(ptr) {}
+	Expression() {}
 
 	bool is_leaf() const;
+	bool is_lambda() const;
 
 	Ptr ptr;
 };
@@ -95,7 +97,7 @@ typedef Value (* Code)(Value context, void* data, Value argument);
 
 typedef std::tr1::shared_ptr<Value const> ValuePtr;
 
-struct ExpressionNode : public std::tr1::enable_shared_from_this<ExpressionNode>
+struct ExpressionNode
 {
 	ExpressionNode(Expression f, Expression a): function(f), argument(a) {}
 
@@ -116,16 +118,31 @@ struct ExpressionNode : public std::tr1::enable_shared_from_this<ExpressionNode>
 		return ptr;
 	}
 
+	static Expression make_lambda(Value v, Expression expr)
+	{
+		std::tr1::shared_ptr<ExpressionNode> ptr(new ExpressionNode(Value(0)));
+		ptr->function = expr;
+		ValuePtr lambda_arg(new Value(v));
+		ptr->lambda_arg = lambda_arg;
+		return Expression(ptr);
+	}
+
 	operator Value() const;
 
 	Expression function;
 	Expression argument;
 	ValuePtr value;
+	ValuePtr lambda_arg;
 };
 
 bool Expression::is_leaf() const
 {
 	return ptr->value;
+}
+
+bool Expression::is_lambda() const
+{
+	return ptr->lambda_arg;
 }
 
 Code* box_function(Code code)
@@ -256,8 +273,11 @@ Value code_duplicate(Value /*context*/, void* /*data*/, Value argument)
 Value duplicate = make_combinator(code_duplicate, 0);
 
 // DSL
+Value evaluate_lamda(Value context, Value expr);
 Value evaluate(Value context, Expression expr)
 {
+	if (expr.is_lambda())
+		return evaluate_lamda(context, expr);
 	if (expr.is_leaf())
 		return *expr.ptr->value;
 	return apply(context, evaluate(context, expr.ptr->function), evaluate(context, expr.ptr->argument));
@@ -489,6 +509,105 @@ Value uncurry = compose * duplicate * (flip * (compose * compose * (compose * fl
 ASSERT(uncurry * true_ * (cons * true_ * false_) == true_);
 ASSERT(uncurry * false_ * (cons * true_ * false_) == false_);
 
+//arg
+Value code_arg(Value /*context*/, void* /*data*/, Value argument)
+{
+	ASSERT(0);
+	exit(1);
+	return argument;
+}
+
+Value arg(char const* sym)
+{
+	return make_combinator(code_arg, symbol(sym).cell);
+}
+
+//lambda
+void check_no_arg(Value arg, Expression expr)
+{
+	if (expr.is_leaf())
+	{
+		ASSERT(expr != arg);
+		return;
+	}
+	if (expr.is_lambda())
+		return check_no_arg(arg, expr.ptr->function);
+	check_no_arg(arg, expr.ptr->function);
+	check_no_arg(arg, expr.ptr->argument);
+}
+
+void check_evacuation(Value arg, Expression expr)
+{
+	if (expr.is_leaf())
+		return;
+	if (expr.is_lambda())
+		return check_no_arg(arg, expr.ptr->function);
+	check_no_arg(arg, expr.ptr->function);
+	if (!expr.ptr->argument.is_leaf())
+		check_no_arg(arg, expr.ptr->argument);
+}
+
+bool expression_is_arg(Value arg, Expression expr)
+{
+	return expr.is_leaf() && (*expr.ptr->value) == arg;
+}
+
+Expression evacuate_arg(Value arg, Expression expr)
+{
+	if (expr.is_leaf())
+	{
+		return expr;
+	}
+	else if (expr.is_lambda())
+	{
+		ASSERT(0);
+		return expr;
+	}
+	else
+	{
+		Expression function = evacuate_arg(arg, expr.ptr->function);
+		Expression argument = evacuate_arg(arg, expr.ptr->argument);
+
+		check_evacuation(arg, function);
+		check_evacuation(arg, argument);
+
+		Expression suffix;
+
+		// If function is arg then flip with identity.
+		if (expression_is_arg(arg, function))
+		{
+
+		}
+
+		// Flip suffix from function to separate suffix.
+		if (!function.is_leaf() && !function.is_lambda())
+		{
+			Expression function_argument = function.ptr->argument;
+			if (expression_is_arg(arg, function_argument))
+			{
+			}
+		}
+
+		// Compose suffix off argument.
+		// Duplicate args together.
+	}
+}
+
+Value evaluate_lamda(Value context, Value /*expr*/)
+{
+	ASSERT(0);
+	return context;
+}
+
+//template <typename T0, typename T1> Apply<X0, X1> evacuate_arg(Apply<T0, T1> const& apply)
+//{
+//}
+
+//template <typename T> Lambda<T>::operator Value() const
+//{
+//	return evacuate_arg(arg(this->param), expr);
+//}
+
 //tapply
 //Value tapply  = lambda(f) {lambda (x) {cons * ((car * f) * (car * x)) * ((cdr * x) * (cdr * x))}}
 
@@ -504,7 +623,6 @@ ASSERT(uncurry * false_ * (cons * true_ * false_) == false_);
 //tconstant
 //Value tconstant = constant
 
-//lambda
 //tlambda
 
 //fix
