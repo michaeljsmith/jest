@@ -3,6 +3,7 @@
 #include <string>
 #include <stdio.h>
 #include <stdlib.h>
+#include <tr1/memory>
 
 struct AssertRaiser
 {
@@ -60,9 +61,22 @@ char* intern(char const* s)
 	return (char*)(*pos).c_str();
 }
 
+struct ExpressionNode;
+struct Expression
+{
+	typedef std::tr1::shared_ptr<ExpressionNode const> Ptr;
+
+	Expression(Ptr ptr): ptr(ptr) {}
+
+	bool is_leaf() const;
+
+	Ptr ptr;
+};
+
 struct Value
 {
 	Value(Cell* cell): cell(cell) {}
+	Value(Expression expr);
 
 	Cell* cell;
 };
@@ -79,18 +93,40 @@ bool operator!=(Value const& l, Value const& r)
 
 typedef Value (* Code)(Value context, void* data, Value argument);
 
-template <typename T0, typename T1> struct Apply
-{
-	typedef T0 Function;
-	typedef T1 Argument;
+typedef std::tr1::shared_ptr<Value const> ValuePtr;
 
-	Apply(T0 const& f, T1 const& a): function(f), argument(a) {}
+struct ExpressionNode : public std::tr1::enable_shared_from_this<ExpressionNode>
+{
+	ExpressionNode(Expression f, Expression a): function(f), argument(a) {}
+
+	ExpressionNode(Value x):
+		function(std::tr1::shared_ptr<ExpressionNode const>()),
+		argument(std::tr1::shared_ptr<ExpressionNode const>()),
+		value(new Value(x)) {}
+
+	static Expression make(Expression x0, Expression x1)
+	{
+		std::tr1::shared_ptr<ExpressionNode const> ptr(new ExpressionNode(x0, x1));
+		return ptr;
+	}
+
+	static Expression make(Value v)
+	{
+		std::tr1::shared_ptr<ExpressionNode const> ptr(new ExpressionNode(v));
+		return ptr;
+	}
 
 	operator Value() const;
 
-	Function function;
-	Argument argument;
+	Expression function;
+	Expression argument;
+	ValuePtr value;
 };
+
+bool Expression::is_leaf() const
+{
+	return ptr->value;
+}
 
 Code* box_function(Code code)
 {
@@ -220,74 +256,56 @@ Value code_duplicate(Value context, void* /*data*/, Value argument)
 Value duplicate = make_combinator(code_duplicate, 0);
 
 // DSL
-Value evaluate(Value context, Value v)
+Value evaluate(Value context, Expression expr)
 {
-	return v;
+	if (expr.is_leaf())
+		return *expr.ptr->value;
+	return apply(context, evaluate(context, expr.ptr->function), evaluate(context, expr.ptr->argument));
 }
 
-template <typename T0, typename T1> Value evaluate(
-		Value context, Apply<T0, T1> const& application)
+Value::Value(Expression expr)
+	: cell(evaluate(Value(0), expr).cell)
 {
-	return apply(context, application.function, application.argument);
-}
-
-template <typename T0, typename T1> Apply<T0, T1>::operator Value() const
-{
-	return evaluate(Value(0), *this);
-}
-
-template <typename T0, typename T1>
-Apply<T0, T1> make_apply(T0 const& x0, T1 const& x1)
-{
-	return Apply<T0, T1>(x0, x1);
 }
 
 //operator*
-Apply<Value, Value> operator*(Value const& x0, Value const& x1)
+Expression operator*(Value const& x0, Value const& x1)
 {
-	return make_apply(x0, x1);
+	return ExpressionNode::make(ExpressionNode::make(x0), ExpressionNode::make(x1));
 }
 
-template <typename T00, typename T01, typename T10, typename T11>
-Apply<Apply<T00, T01>, Apply<T10, T11> > operator*(
-		Apply<T00, T01> const& x0, Apply<T10, T11> const& x1)
+Expression operator*(Expression x0, Expression x1)
 {
-	return make_apply(x0, x1);
+	return ExpressionNode::make(x0, x1);
 }
 
-template <typename T0, typename T1>
-Apply<Apply<T0, T1>, Value> operator*(Apply<T0, T1> const& x0, Value const& x1)
+Expression operator*(Expression x0, Value const& x1)
 {
-	return make_apply(x0, x1);
+	return ExpressionNode::make(x0, ExpressionNode::make(x1));
 }
 
-template <typename T0, typename T1>
-Apply<Value, Apply<T0, T1> > operator*(Value const& x0, Apply<T0, T1> const& x1)
+Expression operator*(Value const& x0, Expression x1)
 {
-	return make_apply(x0, x1);
+	return ExpressionNode::make(ExpressionNode::make(x0), x1);
 }
 
 //operator+
-Apply<Apply<Value, Value>, Value> operator+(Value const& x0, Value const& x1)
+Expression operator+(Value const& x0, Value const& x1)
 {
 	return compose * x0 * x1;
 }
 
-template <typename T00, typename T01, typename T10, typename T11>
-Apply<Apply<Value, Apply<T00, T01> >, Apply<T10, T11> > operator+(
-		Apply<T00, T01> const& x0, Apply<T10, T11> const& x1)
+Expression operator+(Expression x0, Expression x1)
 {
 	return compose * x0 * x1;
 }
 
-template <typename T0, typename T1>
-Apply<Apply<Value, Apply<T0, T1> >, Value> operator+(Apply<T0, T1> const& x0, Value const& x1)
+Expression operator+(Expression x0, Value const& x1)
 {
 	return compose * x0 * x1;
 }
 
-template <typename T0, typename T1>
-Apply<Apply<Value, Value>, Apply<T0, T1> > operator+(Value const& x0, Apply<T0, T1> const& x1)
+Expression operator+(Value const& x0, Expression x1)
 {
 	return compose * x0 * x1;
 }
