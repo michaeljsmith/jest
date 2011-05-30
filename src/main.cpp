@@ -471,7 +471,23 @@ Value uncurry = compose * duplicate * (flip * (compose * compose * (compose * fl
 ASSERT(uncurry * true_ * (cons * true_ * false_) == true_);
 ASSERT(uncurry * false_ * (cons * true_ * false_) == false_);
 
+//tapply
+//Value tapply  = lambda(f) {lambda (x) {cons * ((car * f) * (car * x)) * ((cdr * x) * (cdr * x))}}
+
+//tcompose
+//Value tcompose = lambda(f) {lambda (g) {lambda (x) {tapply * f * (tapply * g * x)}}}
+
+//tflip
+//Value tflip = lambda(f) {cons * (flip * (car * f)) * (flip * (cdr * f))}
+
+//tduplicate
+//Value tduplicate = lambda(f) {cons * (duplicate * (car * f)) * (duplicate * (cdr * f))}
+
+//tconstant
+//Value tconstant = constant
+
 //lambda
+//tlambda
 
 //fix
 
