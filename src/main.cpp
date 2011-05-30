@@ -550,29 +550,30 @@ ASSERT(lambda("x", compose * arg("x") * (flip * arg("x"))) * fail == substitute 
 ASSERT(lambda("x", lambda("y", arg("x") * arg("y"))) * flip * compose == flip * compose);
 ASSERT(lambda("x", lambda("y", arg("x") * arg("y") * (arg("y") * arg("x")))) * flip * compose == flip * compose * (compose * flip));
 
-//template <typename T0, typename T1> Apply<X0, X1> evacuate_arg(Apply<T0, T1> const& apply)
-//{
-//}
-
-//template <typename T> Lambda<T>::operator Value() const
-//{
-//	return evacuate_arg(arg(this->param), expr);
-//}
-
 //tapply
-//Value tapply  = lambda(f) {lambda (x) {cons * ((car * f) * (car * x)) * ((cdr * x) * (cdr * x))}}
+Value tapply  = lambda("f", lambda("x",
+			cons *
+			((car * arg("f")) * (car * arg("x"))) *
+			((cdr * arg("f")) * (cdr * arg("x")))));
 
 //tcompose
-//Value tcompose = lambda(f) {lambda (g) {lambda (x) {tapply * f * (tapply * g * x)}}}
+Value tcompose = lambda("f", lambda("g", lambda ("x",
+				tapply * arg("f") * (tapply * arg("g") * arg("x")))));
 
 //tflip
-//Value tflip = lambda(f) {cons * (flip * (car * f)) * (flip * (cdr * f))}
+Value tflip = lambda("f",
+		cons *
+		(flip * (car * arg("f"))) *
+		(flip * (cdr * arg("f"))));
 
 //tduplicate
-//Value tduplicate = lambda(f) {cons * (duplicate * (car * f)) * (duplicate * (cdr * f))}
+Value tduplicate = lambda("f",
+		cons *
+		(duplicate * (car * arg("f"))) *
+		(duplicate * (cdr * arg("f"))));
 
 //tconstant
-//Value tconstant = constant
+Value tconstant = constant;
 
 //tlambda
 
