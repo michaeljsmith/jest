@@ -62,12 +62,17 @@ char* intern(char const* s)
 }
 
 struct ExpressionNode;
+struct Value;
 struct Expression
 {
 	typedef std::tr1::shared_ptr<ExpressionNode const> Ptr;
 
-	Expression(Ptr ptr): ptr(ptr) {}
-	Expression() {}
+	Expression(Ptr ptr): ptr(ptr)
+	{
+		if (ptr)
+			ASSERT(!is_leaf() || !is_lambda());
+	}
+	Expression(Value value);
 
 	bool is_leaf() const;
 	bool is_lambda() const;
@@ -101,10 +106,10 @@ struct ExpressionNode
 {
 	ExpressionNode(Expression f, Expression a): function(f), argument(a) {}
 
-	ExpressionNode(Value x):
+	ExpressionNode():
 		function(std::tr1::shared_ptr<ExpressionNode const>()),
 		argument(std::tr1::shared_ptr<ExpressionNode const>()),
-		value(new Value(x)) {}
+		value() {}
 
 	static Expression make(Expression x0, Expression x1)
 	{
@@ -114,13 +119,15 @@ struct ExpressionNode
 
 	static Expression make(Value v)
 	{
-		std::tr1::shared_ptr<ExpressionNode const> ptr(new ExpressionNode(v));
-		return ptr;
+		std::tr1::shared_ptr<ExpressionNode> ptr(new ExpressionNode());
+		ValuePtr value_ptr(new Value(v));
+		ptr->value = value_ptr;
+		return Expression(ptr);
 	}
 
 	static Expression make_lambda(Value v, Expression expr)
 	{
-		std::tr1::shared_ptr<ExpressionNode> ptr(new ExpressionNode(Value(0)));
+		std::tr1::shared_ptr<ExpressionNode> ptr(new ExpressionNode());
 		ptr->function = expr;
 		ValuePtr lambda_arg(new Value(v));
 		ptr->lambda_arg = lambda_arg;
@@ -135,13 +142,21 @@ struct ExpressionNode
 	ValuePtr lambda_arg;
 };
 
+Expression::Expression(Value value)
+{
+	*this = ExpressionNode::make(value);
+	ASSERT(!is_leaf() || !is_lambda());
+}
+
 bool Expression::is_leaf() const
 {
+	ASSERT(ptr);
 	return ptr->value;
 }
 
 bool Expression::is_lambda() const
 {
+	ASSERT(ptr);
 	return ptr->lambda_arg;
 }
 
@@ -273,15 +288,7 @@ Value code_duplicate(Value /*context*/, void* /*data*/, Value argument)
 Value duplicate = make_combinator(code_duplicate, 0);
 
 // DSL
-Value evaluate_lamda(Value context, Value expr);
-Value evaluate(Value context, Expression expr)
-{
-	if (expr.is_lambda())
-		return evaluate_lamda(context, expr);
-	if (expr.is_leaf())
-		return *expr.ptr->value;
-	return apply(context, evaluate(context, expr.ptr->function), evaluate(context, expr.ptr->argument));
-}
+Value evaluate(Value context, Expression expr);
 
 Value::Value(Expression expr)
 	: cell(evaluate(Value(0), expr).cell)
@@ -517,87 +524,31 @@ Value code_arg(Value /*context*/, void* /*data*/, Value argument)
 	return argument;
 }
 
-Value arg(char const* sym)
+Expression arg(char const* sym)
 {
-	return make_combinator(code_arg, symbol(sym).cell);
+	return ExpressionNode::make(make_combinator(code_arg, symbol(sym).cell));
 }
+
+//substitute
+//Sxyz = xz(yz)
+Value substitute = compose * (compose * duplicate) * (compose * compose * flip);
+ASSERT(substitute * compose * flip * duplicate == compose * duplicate * (flip * duplicate));
+ASSERT(substitute * flip * compose * constant == flip * constant * (compose * constant));
 
 //lambda
-void check_no_arg(Value arg, Expression expr)
+Expression lambda(char const* param, Expression expr)
 {
-	if (expr.is_leaf())
-	{
-		ASSERT(expr != arg);
-		return;
-	}
-	if (expr.is_lambda())
-		return check_no_arg(arg, expr.ptr->function);
-	check_no_arg(arg, expr.ptr->function);
-	check_no_arg(arg, expr.ptr->argument);
+	return ExpressionNode::make_lambda(arg(param), expr);
 }
 
-void check_evacuation(Value arg, Expression expr)
-{
-	if (expr.is_leaf())
-		return;
-	if (expr.is_lambda())
-		return check_no_arg(arg, expr.ptr->function);
-	check_no_arg(arg, expr.ptr->function);
-	if (!expr.ptr->argument.is_leaf())
-		check_no_arg(arg, expr.ptr->argument);
-}
-
-bool expression_is_arg(Value arg, Expression expr)
-{
-	return expr.is_leaf() && (*expr.ptr->value) == arg;
-}
-
-Expression evacuate_arg(Value arg, Expression expr)
-{
-	if (expr.is_leaf())
-	{
-		return expr;
-	}
-	else if (expr.is_lambda())
-	{
-		ASSERT(0);
-		return expr;
-	}
-	else
-	{
-		Expression function = evacuate_arg(arg, expr.ptr->function);
-		Expression argument = evacuate_arg(arg, expr.ptr->argument);
-
-		check_evacuation(arg, function);
-		check_evacuation(arg, argument);
-
-		Expression suffix;
-
-		// If function is arg then flip with identity.
-		if (expression_is_arg(arg, function))
-		{
-
-		}
-
-		// Flip suffix from function to separate suffix.
-		if (!function.is_leaf() && !function.is_lambda())
-		{
-			Expression function_argument = function.ptr->argument;
-			if (expression_is_arg(arg, function_argument))
-			{
-			}
-		}
-
-		// Compose suffix off argument.
-		// Duplicate args together.
-	}
-}
-
-Value evaluate_lamda(Value context, Value /*expr*/)
-{
-	ASSERT(0);
-	return context;
-}
+//ASSERT(identity == lambda("x", arg("x")));
+ASSERT(lambda("x", compose) * fail == compose);
+ASSERT(lambda("x", arg("x")) == identity);
+ASSERT(lambda("x", compose * compose) * fail == compose * compose);
+ASSERT(lambda("x", flip * arg("x")) * cons * true_ * false_ == cons * false_ * true_);
+ASSERT(lambda("x", compose * arg("x") * (flip * arg("x"))) * fail == substitute * compose * flip * fail);
+ASSERT(lambda("x", lambda("y", arg("x") * arg("y"))) * flip * compose == flip * compose);
+ASSERT(lambda("x", lambda("y", arg("x") * arg("y") * (arg("y") * arg("x")))) * flip * compose == flip * compose * (compose * flip));
 
 //template <typename T0, typename T1> Apply<X0, X1> evacuate_arg(Apply<T0, T1> const& apply)
 //{
@@ -636,4 +587,48 @@ Value evaluate_lamda(Value context, Value /*expr*/)
 int main()
 {
 	return 0;
+}
+
+Expression eliminate_lambda(Expression expr)
+{
+	//fprintf(stderr, "eliminate_lambda\n");
+
+	//TODO: Optimize the output of this.
+	if (expr.is_leaf())
+	{
+		ASSERT(!expr.is_lambda());
+		return expr;
+	}
+	if (!expr.is_lambda())
+		return ExpressionNode::make(eliminate_lambda(expr.ptr->function), eliminate_lambda(expr.ptr->argument));
+	Value param = *expr.ptr->lambda_arg;
+	Expression subexpr = expr.ptr->function;
+	if (subexpr.is_leaf() && *subexpr.ptr->value == param)
+		return ExpressionNode::make(identity);
+	if (subexpr.is_leaf())
+		return ExpressionNode::make(ExpressionNode::make(constant), subexpr);
+	if (subexpr.is_lambda())
+		return eliminate_lambda(ExpressionNode::make_lambda(param, eliminate_lambda(subexpr)));
+	//T[Lx.(E1 E2)] => (S T[Lx.E1] T[Lx.E2])
+	Expression subfunction = subexpr.ptr->function;
+	Expression subargument = subexpr.ptr->argument;
+	return ExpressionNode::make(ExpressionNode::make(ExpressionNode::make(substitute),
+				eliminate_lambda(ExpressionNode::make_lambda(param, subfunction))),
+			eliminate_lambda(ExpressionNode::make_lambda(param, subargument)));
+}
+
+Expression eliminate_lambda2(Expression expr)
+{
+	Expression elim = eliminate_lambda(expr);
+	ASSERT(!elim.is_lambda());
+	return elim;
+}
+
+Value evaluate(Value context, Expression expr)
+{
+	if (expr.is_lambda())
+		return evaluate(context, eliminate_lambda2(expr));
+	if (expr.is_leaf())
+		return *expr.ptr->value;
+	return apply(context, evaluate(context, expr.ptr->function), evaluate(context, expr.ptr->argument));
 }
