@@ -158,7 +158,7 @@ Value make_combinator(Code code, void* data)
 }
 
 //fail
-Value code_fail1(Value context, void* data, Value argument)
+Value code_fail1(Value /*context*/, void* /*data*/, Value argument)
 {
 	fprintf(stderr, "fail\n");
 	ASSERT(0);
@@ -166,7 +166,7 @@ Value code_fail1(Value context, void* data, Value argument)
 	return argument;
 }
 
-Value code_fail(Value context, void* /*data*/, Value argument)
+Value code_fail(Value /*context*/, void* /*data*/, Value argument)
 {
 	return make_combinator(code_fail1, argument.cell);
 }
@@ -184,14 +184,14 @@ Value code_compose2(Value context, void* data, Value argument)
 	return apply(context, Value(f0), apply(context, Value(f1), argument));
 }
 
-Value code_compose1(Value context, void* data, Value argument)
+Value code_compose1(Value /*context*/, void* data, Value argument)
 {
 	Cell* f0 = (Cell*)data;
 	ASSERT(f0);
 	return make_combinator(code_compose2, make_cell(f0, argument.cell));
 }
 
-Value code_compose(Value context, void* /*data*/, Value argument)
+Value code_compose(Value /*context*/, void* /*data*/, Value argument)
 {
 	return make_combinator(code_compose1, argument.cell);
 }
@@ -210,14 +210,14 @@ Value code_flip2(Value context, void* data, Value argument)
 	return apply(context, apply(context, Value(f0), argument), Value(f1));
 }
 
-Value code_flip1(Value context, void* data, Value argument)
+Value code_flip1(Value /*context*/, void* data, Value argument)
 {
 	Cell* f0 = (Cell*)data;
 	ASSERT(f0);
 	return make_combinator(code_flip2, make_cell(f0, argument.cell));
 }
 
-Value code_flip(Value context, void* /*data*/, Value argument)
+Value code_flip(Value /*context*/, void* /*data*/, Value argument)
 {
 	return make_combinator(code_flip1, argument.cell);
 }
@@ -225,14 +225,14 @@ Value code_flip(Value context, void* /*data*/, Value argument)
 Value flip = make_combinator(code_flip, 0);
 
 //constant
-Value code_constant1(Value context, void* data, Value /*argument*/)
+Value code_constant1(Value /*context*/, void* data, Value /*argument*/)
 {
 	Cell* f0 = (Cell*)data;
 	ASSERT(f0);
 	return f0;
 }
 
-Value code_constant(Value context, void* /*data*/, Value argument)
+Value code_constant(Value /*context*/, void* /*data*/, Value argument)
 {
 	ASSERT(argument.cell);
 	return make_combinator(code_constant1, argument.cell);
@@ -248,7 +248,7 @@ Value code_duplicate1(Value context, void* data, Value argument)
 	return apply(context, apply(context, Value(f0), argument), argument);
 }
 
-Value code_duplicate(Value context, void* /*data*/, Value argument)
+Value code_duplicate(Value /*context*/, void* /*data*/, Value argument)
 {
 	return make_combinator(code_duplicate1, argument.cell);
 }
@@ -360,7 +360,7 @@ Value symbol(char const* str)
 }
 
 //symbolp
-Value code_symbolp(Value context, void* /*data*/, Value argument)
+Value code_symbolp(Value /*context*/, void* /*data*/, Value argument)
 {
 	ASSERT(argument.cell);
 	Code* box = (Code*)argument.cell->head;
@@ -370,14 +370,14 @@ Value code_symbolp(Value context, void* /*data*/, Value argument)
 Value symbolp = make_combinator(code_symbolp, 0);
 
 //identical
-Value code_identical1(Value context, void* data, Value argument)
+Value code_identical1(Value /*context*/, void* data, Value argument)
 {
 	Cell* f0 = (Cell*)data;
 	ASSERT(f0);
 	return boolean(f0 == argument.cell);
 }
 
-Value code_identical(Value context, void* /*data*/, Value argument)
+Value code_identical(Value /*context*/, void* /*data*/, Value argument)
 {
 	ASSERT(argument.cell);
 	return make_combinator(code_identical1, argument.cell);
@@ -400,7 +400,7 @@ Value make_code(Code* code)
 }
 
 //codeof
-Value code_codeof(Value context, void* /*data*/, Value argument)
+Value code_codeof(Value /*context*/, void* /*data*/, Value argument)
 {
 	ASSERT(argument.cell);
 	Code* code = (Code*)argument.cell->head;
