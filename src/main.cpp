@@ -550,30 +550,59 @@ ASSERT(lambda("x", compose * arg("x") * (flip * arg("x"))) * fail == substitute 
 ASSERT(lambda("x", lambda("y", arg("x") * arg("y"))) * flip * compose == flip * compose);
 ASSERT(lambda("x", lambda("y", arg("x") * arg("y") * (arg("y") * arg("x")))) * flip * compose == flip * compose * (compose * flip));
 
+//fix
+//(define applicative-order-y
+//  (lambda (f)
+//    ((lambda (x) 
+//       (f (lambda (arg) ((x x) arg))))
+//     (lambda (x) 
+//       (f (lambda (arg) ((x x) arg)))))))
+Value fix = lambda("f",
+		lambda("x", arg("f") * lambda("y", (arg("x") * arg("x")) * arg("y"))) *
+		lambda("x", arg("f") * lambda("y", (arg("x") * arg("x")) * arg("y"))));
+
+namespace detail
+{
+	Value inc = cons * cons;
+
+	Value recurse_sample_gen = lambda("t",
+			lambda("f",
+				lambda("l",
+					((cons *
+					  (constant * arg("l")) *
+					  arg("f")) *
+					 (identical * arg("t") * arg("l"))) *
+					(inc * arg("l")))));
+
+	Value initial = (cons * true_ * false_);
+	Value recurse_sample0 = recurse_sample_gen * initial;
+
+	Value second = (inc * initial);
+	Value recurse_sample1 = recurse_sample_gen * second;
+
+	Value third = (inc * second);
+
+	Value fix_sample = fix * (recurse_sample_gen * third);
+}
+
+ASSERT(detail::recurse_sample0 * fail * detail::initial == detail::initial);
+ASSERT(detail::recurse_sample1 * identity * detail::initial == detail::second);
+ASSERT(detail::fix_sample * detail::initial == detail::third);
+
 //tapply
-Value tapply  = lambda("f", lambda("x",
-			cons *
-			((car * arg("f")) * (car * arg("x"))) *
-			((cdr * arg("f")) * (cdr * arg("x")))));
+//Value tapply  = lambda(f) {lambda (x) {cons * ((car * f) * (car * x)) * ((cdr * x) * (cdr * x))}}
 
 //tcompose
-Value tcompose = lambda("f", lambda("g", lambda ("x",
-				tapply * arg("f") * (tapply * arg("g") * arg("x")))));
+//Value tcompose = lambda(f) {lambda (g) {lambda (x) {tapply * f * (tapply * g * x)}}}
 
 //tflip
-Value tflip = lambda("f",
-		cons *
-		(flip * (car * arg("f"))) *
-		(flip * (cdr * arg("f"))));
+//Value tflip = lambda(f) {cons * (flip * (car * f)) * (flip * (cdr * f))}
 
 //tduplicate
-Value tduplicate = lambda("f",
-		cons *
-		(duplicate * (car * arg("f"))) *
-		(duplicate * (cdr * arg("f"))));
+//Value tduplicate = lambda(f) {cons * (duplicate * (car * f)) * (duplicate * (cdr * f))}
 
 //tconstant
-Value tconstant = constant;
+//Value tconstant = constant
 
 //tlambda
 
