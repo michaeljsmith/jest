@@ -590,43 +590,32 @@ ASSERT(detail::recurse_sample1 * identity * detail::initial == detail::second);
 ASSERT(detail::fix_sample * detail::initial == detail::third);
 
 //tapply
-Value tapply  = lambda("f", lambda("x",
-			cons *
-			((car * arg("f")) * (car * arg("x"))) *
-			((cdr * arg("f")) * (cdr * arg("x")))));
+//Value tapply  = lambda(f) {lambda (x) {cons * ((car * f) * (car * x)) * ((cdr * x) * (cdr * x))}}
 
 //tcompose
-Value tcompose = lambda("f", lambda("g", lambda ("x",
-				tapply * arg("f") * (tapply * arg("g") * arg("x")))));
+//Value tcompose = lambda(f) {lambda (g) {lambda (x) {tapply * f * (tapply * g * x)}}}
 
 //tflip
-Value tflip = lambda("f",
-		cons *
-		(flip * (car * arg("f"))) *
-		(flip * (cdr * arg("f"))));
+//Value tflip = lambda(f) {cons * (flip * (car * f)) * (flip * (cdr * f))}
 
 //tduplicate
-Value tduplicate = lambda("f",
-		cons *
-		(duplicate * (car * arg("f"))) *
-		(duplicate * (cdr * arg("f"))));
+//Value tduplicate = lambda(f) {cons * (duplicate * (car * f)) * (duplicate * (cdr * f))}
 
 //tconstant
-Value tconstant = constant;
-
-Value sample_type = symbol("type!");
-Value sample_value = symbol("value");
-Value sample_instance = cons * sample_type * sample_value;
-
-//concept_nil
-//concept_cons
-//concept_requirement
-
-//model_nil
-//model_cons
-//model_provision
+//Value tconstant = constant
 
 //tlambda
+
+//check
+Value check = lambda("m", lambda("c",
+			(cons *
+			 identity *
+			 (fail * arg("m"))) *
+			arg("c") * true_));
+
+ASSERT(identity * (check * symbol("test_message") * true_) == true_);
+
+//fix
 
 //source
 //trace
