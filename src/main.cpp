@@ -590,19 +590,29 @@ ASSERT(detail::recurse_sample1 * identity * detail::initial == detail::second);
 ASSERT(detail::fix_sample * detail::initial == detail::third);
 
 //tapply
-//Value tapply  = lambda(f) {lambda (x) {cons * ((car * f) * (car * x)) * ((cdr * x) * (cdr * x))}}
+Value tapply  = lambda("f", lambda("x",
+			cons *
+			((car * arg("f")) * (car * arg("x"))) *
+			((cdr * arg("f")) * (cdr * arg("x")))));
 
 //tcompose
-//Value tcompose = lambda(f) {lambda (g) {lambda (x) {tapply * f * (tapply * g * x)}}}
+Value tcompose = lambda("f", lambda("g", lambda ("x",
+				tapply * arg("f") * (tapply * arg("g") * arg("x")))));
 
 //tflip
-//Value tflip = lambda(f) {cons * (flip * (car * f)) * (flip * (cdr * f))}
+Value tflip = lambda("f",
+		cons *
+		(flip * (car * arg("f"))) *
+		(flip * (cdr * arg("f"))));
 
 //tduplicate
-//Value tduplicate = lambda(f) {cons * (duplicate * (car * f)) * (duplicate * (cdr * f))}
+Value tduplicate = lambda("f",
+		cons *
+		(duplicate * (car * arg("f"))) *
+		(duplicate * (cdr * arg("f"))));
 
 //tconstant
-//Value tconstant = constant
+Value tconstant = constant;
 
 //tlambda
 
