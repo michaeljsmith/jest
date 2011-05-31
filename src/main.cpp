@@ -359,12 +359,76 @@ Value boolean(bool x)
 	return x ? true_ : false_;
 }
 
+//code
+Value code_code(Value /*context*/, void* /*data*/, Value /*argument*/)
+{
+	ASSERT(0);
+	return fail;
+}
+
+Value make_code(Code* code)
+{
+	return make_combinator(code_code, code);
+}
+
+//codeof
+Value code_codeof(Value /*context*/, void* /*data*/, Value argument)
+{
+	ASSERT(argument.cell);
+	Code* code = (Code*)argument.cell->head;
+	ASSERT(code);
+	return make_code(code);
+}
+
+Value codeof = make_combinator(code_codeof, 0);
+ASSERT(codeof * fail == codeof * fail);
+ASSERT(codeof * compose != codeof * fail);
+
 //cons
 Value cons = flip + (flip * identity);
 ASSERT(identity * compose * fail == compose * fail);
 ASSERT(flip * identity * compose * constant == constant * compose);
 ASSERT(cons * fail * compose * true_ == fail);
 ASSERT(cons * fail * compose * false_ == compose);
+
+//identical
+Value code_identical1(Value /*context*/, void* data, Value argument)
+{
+	Cell* f0 = (Cell*)data;
+	ASSERT(f0);
+	return boolean(f0 == argument.cell);
+}
+
+Value code_identical(Value /*context*/, void* /*data*/, Value argument)
+{
+	ASSERT(argument.cell);
+	return make_combinator(code_identical1, argument.cell);
+}
+
+Value identical = make_combinator(code_identical, 0);
+ASSERT(identical * fail * fail == true_);
+ASSERT(identical * fail * compose == false_);
+
+//composep
+namespace detail
+{
+	Value compose_sample0 = fail + fail;
+	Value compose_code = codeof * compose_sample0;
+	Value compose_sample1 = true_ + false_;
+}
+Value composep = identical * detail::compose_code + codeof;
+ASSERT(false_ == composep * fail);
+ASSERT(true_ == composep * detail::compose_sample1);
+
+//consp
+//TODO: Implement properly.
+namespace detail
+{
+	Value flip2_sample0 = flip * fail;
+	Value flip2_code = codeof * flip2_sample0;
+}
+Value consp = identical * detail::flip2_code + codeof;
+ASSERT(consp * (cons * fail * false_) == true_);
 
 //car
 Value car = flip * identity * true_;
@@ -396,59 +460,11 @@ Value code_symbolp(Value /*context*/, void* /*data*/, Value argument)
 
 Value symbolp = make_combinator(code_symbolp, 0);
 
-//identical
-Value code_identical1(Value /*context*/, void* data, Value argument)
-{
-	Cell* f0 = (Cell*)data;
-	ASSERT(f0);
-	return boolean(f0 == argument.cell);
-}
+// nil
+Value nil = symbol("nil");
 
-Value code_identical(Value /*context*/, void* /*data*/, Value argument)
-{
-	ASSERT(argument.cell);
-	return make_combinator(code_identical1, argument.cell);
-}
-
-Value identical = make_combinator(code_identical, 0);
-ASSERT(identical * fail * fail == true_);
-ASSERT(identical * fail * compose == false_);
-
-//code
-Value code_code(Value /*context*/, void* /*data*/, Value /*argument*/)
-{
-	ASSERT(0);
-	return fail;
-}
-
-Value make_code(Code* code)
-{
-	return make_combinator(code_code, code);
-}
-
-//codeof
-Value code_codeof(Value /*context*/, void* /*data*/, Value argument)
-{
-	ASSERT(argument.cell);
-	Code* code = (Code*)argument.cell->head;
-	ASSERT(code);
-	return make_code(code);
-}
-
-Value codeof = make_combinator(code_codeof, 0);
-ASSERT(codeof * fail == codeof * fail);
-ASSERT(codeof * compose != codeof * fail);
-
-//composep
-namespace detail
-{
-	Value compose_sample0 = fail + fail;
-	Value compose_code = codeof * compose_sample0;
-	Value compose_sample1 = true_ + false_;
-}
-Value composep = identical * detail::compose_code + codeof;
-ASSERT(false_ == composep * fail);
-ASSERT(true_ == composep * detail::compose_sample1);
+// nilp
+Value nilp = identical * nil;
 
 //curry
 //Value curry = lambda(f) {lambda(x) {lambda(y) {f * (cons * x * y)}}}
@@ -614,7 +630,9 @@ Value tduplicate = lambda("f",
 //tconstant
 Value tconstant = constant;
 
-//tlambda
+Value sample_type = symbol("type!");
+Value sample_value = symbol("value");
+Value sample_instance = cons * sample_type * sample_value;
 
 //check
 Value check = lambda("m", lambda("c",
@@ -625,7 +643,29 @@ Value check = lambda("m", lambda("c",
 
 ASSERT(identity * (check * symbol("test_message") * true_) == true_);
 
-//fix
+//concept_tag
+Value concept_tag = symbol("concept_requirement");
+
+//concept_nil
+Value concept_nil = cons * concept_tag * nil;
+
+//conceptp
+//Value conceptp = lambda("c", 
+
+//concept_cons
+//Value concept_cons = lambda("r", lambda("c",
+//			check * symbol("not a concept") * (conceptp * arg("c"))
+
+//concept_requirement
+Value concept_requirement = lambda("name", lambda("type",
+			cons * concept_tag * (cons * arg("name") * arg("type"))));
+
+//model_nil
+//model_cons
+//model_provision
+//model_lookup
+
+//tlambda
 
 //source
 //trace
