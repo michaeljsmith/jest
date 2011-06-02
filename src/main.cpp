@@ -1,137 +1,190 @@
-#include <stdio.h>
-#include <stdlib.h>
+#include <set>
 #include <map>
 #include <string>
-#include <set>
-#include <cassert>
+#include <assert.h>
 
-struct Object;
-
-struct Value
+struct Cell
 {
-	Object* x;
-
-	operator Value() {return x;}
-
-	Value operator()();
-	template <typename X0> Value operator()(X0 const& x0);
-	template <typename X0, typename X1> Value operator()(X0 const& x0, X1 const& x1);
-	template <typename X0, typename X1, typename X2> Value operator()(X0 const& x0, X1 const& x1, X2 const& x2);
-	template <typename X0, typename X1, typename X2, typename X3> Value operator()(X0 const& x0, X1 const& x1, X2 const& x2, X3 const& x3);
-	template <typename X0, typename X1, typename X2, typename X3, typename X4> Value operator()(X0 const& x0, X1 const& x1, X2 const& x2, X3 const& x3, X4 const& x4);
-	template <typename X0, typename X1, typename X2, typename X3, typename X4, typename X5> Value operator()(X0 const& x0, X1 const& x1, X2 const& x2, X3 const& x3, X4 const& x4, X5 const& x5);
-
-	bool operator==(Value const& other) const {return x == other.x;}
-	bool operator!=(Value const& other) const {return x != other.x;}
-
-	template <typename Idx> Value operator[](Idx idx);
-
-	Value(Object* x): x(x) {}
+	Cell(void* head, void* tail): head(head), tail(tail) {}
+	void* head;
+	void* tail;
 };
 
-typedef Value (* BuiltinFn)(Value args);
-
-struct Object
-{
-	Object(BuiltinFn fn): fn(fn) {}
-	BuiltinFn fn;
-};
-
-Value cell_object_(Value args) {assert(0);}
-struct Cell : public Object
-{
-	Cell(Value head, Value tail):
-		Object(cell_object_), head(head), tail(tail) {}
-	Value head;
-	Value tail;
-};
-
-Value cons_(Value args)
+Cell* make_cell(void* head, void* tail)
 {
 	using namespace std;
 
-	typedef map<std::pair<Value, Value>, Value> CellMap;
+	typedef map<std::pair<void*, void*>, Cell*> CellMap;
 	static CellMap cell_map;
 	CellMap::iterator pos = cell_map.find(make_pair(head, tail));
 	if (pos == cell_map.end())
 	{
-		Value cell = new Cell(head, tail);
+		Cell* cell = new Cell(head, tail);
 		pos = cell_map.insert(make_pair(make_pair(head, tail), cell)).first;
 	}
 
 	return (*pos).second;
 }
 
-Value consp_(Value args)
-{
-	return x.x->type == cell_type;
-}
-
-Value car_(Value x)
-{
-	assert(consp(x));
-	return ((Cell*)x.x)->head;
-}
-
-Value cdr_(Value x)
-{
-	assert(consp(x));
-	return ((Cell*)x.x)->tail;
-}
-
-Value symbol_object_(Value args) {assert(0);}
-struct Symbol : public Object
-{
-	Symbol(char const* sym): Object(symbol_type)
-	{
-		this->sym = (char*)malloc(strlen(sym) + 1);
-		strcpy(this->sym, sym);
-	}
-
-	char* sym;
-};
-
-Value symbol(char const* s)
+char const* intern(char const* s)
 {
 	using namespace std;
 
-	typedef map<string, Value> SymMap;
+	typedef set<string> SymMap;
 	static SymMap symbol_map;
 	string str(s);
 	SymMap::iterator pos = symbol_map.find(str);
 	if (pos == symbol_map.end())
 	{
-		Value symbol = new Symbol(s);
-		pos = symbol_map.insert(make_pair(str, symbol)).first;
+		pos = symbol_map.insert(str).first;
+	}
+
+	return (*pos).c_str();
+}
+
+struct Value
+{
+	Value(Cell* cell): cell(cell) {}
+
+	Cell* cell;
+};
+
+typedef Value (* Code)(Value context, void* data, Value argument);
+
+Code* box_function(Code code)
+{
+	using namespace std;
+
+	typedef map<Code, Code*> CellMap;
+	static CellMap cell_map;
+	CellMap::iterator pos = cell_map.find(code);
+	if (pos == cell_map.end())
+	{
+		Code* box = new Code[1];
+		box[0] = code;
+		pos = cell_map.insert(make_pair(code, box)).first;
 	}
 
 	return (*pos).second;
 }
 
-Value nil = symbol("nil");
-Value _f = symbol("_f");
-Value _t = symbol("_t");
-
-Value gensym()
+Value apply(Value context, Value function, Value argument)
 {
-	static int next_id = 100;
-	char str[1024];
-	sprintf(str, "@gensym%d", next_id++);
-	return symbol(str);
+	Code code = *(Code*)(function.cell->head);
+	void* data = function.cell->tail;
+	return code(context, data, argument);
 }
+
+template <typename T0, typename T1> struct Apply
+{
+	typedef T0 Function;
+	typedef T1 Argument;
+
+	Function function;
+	Argument argument;
+};
+
+Value make_combinator(Code code, void* data)
+{
+	return Value(new Cell(box_function(code), 0));
+}
+
+//fail
+Value code_fail(Value context, void* /*data*/, Value argument)
+{
+	assert(0);
+}
+Value fail = make_combinator(code_fail, 0);
+
+//compose
+Value code_compose2(Value context, void* data, Value argument)
+{
+	Cell* fs = (Cell*)data;
+	assert(fs);
+	Cell* f0 = (Cell*)(fs->head);
+	assert(f0);
+	Cell* f1 = (Cell*)(fs->tail);
+	assert(f1);
+	return apply(context, Value(f0), apply(context, Value(f1), argument));
+}
+
+Value code_compose1(Value context, void* data, Value argument)
+{
+	Cell* f0 = (Cell*)data;
+	assert(f0);
+	return make_combinator(code_compose2, make_cell(f0, argument.cell));
+}
+
+Value code_compose(Value context, void* /*data*/, Value argument)
+{
+	return make_combinator(code_compose1, argument.cell);
+}
+Value compose = make_combinator(code_compose, 0);
+
+//flip
+Value code_flip2(Value context, void* data, Value argument)
+{
+	Cell* fs = (Cell*)data;
+	assert(fs);
+	Cell* f0 = (Cell*)(fs->head);
+	assert(f0);
+	Cell* f1 = (Cell*)(fs->tail);
+	assert(f1);
+	return apply(context, apply(context, Value(f0), argument), Value(f1));
+}
+
+Value code_flip1(Value context, void* data, Value argument)
+{
+	Cell* f0 = (Cell*)data;
+	assert(f0);
+	return make_combinator(code_flip2, make_cell(f0, argument.cell));
+}
+
+Value code_flip(Value context, void* /*data*/, Value argument)
+{
+	return make_combinator(code_flip1, argument.cell);
+}
+Value flip = make_combinator(code_flip, 0);
+
+//constant
+Value code_constant1(Value context, void* data, Value argument)
+{
+	Cell* f0 = (Cell*)data;
+	assert(f0);
+	return apply(context, apply(context, Value(f0), argument), Value(f0));
+}
+
+Value code_constant(Value context, void* /*data*/, Value argument)
+{
+	return make_combinator(code_constant1, argument.cell);
+}
+Value constant = make_combinator(code_constant, 0);
+
+//duplicate
+Value code_duplicate1(Value context, void* data, Value argument)
+{
+	Cell* f0 = (Cell*)data;
+	assert(f0);
+	return f0;
+}
+
+Value code_duplicate(Value context, void* /*data*/, Value argument)
+{
+	return make_combinator(code_duplicate1, argument.cell);
+}
+Value duplicate = make_combinator(code_constant, 0);
+
+//lambda
+//condition
+//fix
+//source
+//enter
+//module
+//function
+//operator*
 
 int main()
 {
 	return 0;
 }
 
-Value Value::operator()() {return list(x);}
-template <typename X0> Value Value::operator()(X0 const& x0) {return list(x, value(x0));}
-template <typename X0, typename X1> Value Value::operator()(X0 const& x0, X1 const& x1) {return list(x, value(x0), value(x1));}
-template <typename X0, typename X1, typename X2> Value Value::operator()(X0 const& x0, X1 const& x1, X2 const& x2) {return list(x, value(x0), value(x1), value(x2));}
-template <typename X0, typename X1, typename X2, typename X3> Value Value::operator()(X0 const& x0, X1 const& x1, X2 const& x2, X3 const& x3) {return list(x, value(x0), value(x1), value(x2), value(x3));}
-template <typename X0, typename X1, typename X2, typename X3, typename X4> Value Value::operator()(X0 const& x0, X1 const& x1, X2 const& x2, X3 const& x3, X4 const& x4) {return list(x, value(x0), value(x1), value(x2), value(x3), value(x4));}
-template <typename X0, typename X1, typename X2, typename X3, typename X4, typename X5> Value Value::operator()(X0 const& x0, X1 const& x1, X2 const& x2, X3 const& x3, X4 const& x4, X5 const& x5) {return list(x, value(x0), value(x1), value(x2), value(x3), value(x4), value(x5));}
-
-Value value(Object* x) {return Value(x);}
-Value value(char const* x) {return symbol(x);}
