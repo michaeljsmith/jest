@@ -2,6 +2,8 @@
 #include <map>
 #include <string>
 #include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 struct Cell
 {
@@ -90,9 +92,17 @@ Value make_combinator(Code code, void* data)
 }
 
 //fail
+Value code_fail1(Value context, void* data, Value argument)
+{
+	Cell* f0 = (Cell*)data;
+	fprintf(stderr, "fail\n");
+	exit(1);
+	return argument;
+}
+
 Value code_fail(Value context, void* /*data*/, Value argument)
 {
-	assert(0);
+	return make_combinator(code_fail1, argument.cell);
 }
 Value fail = make_combinator(code_fail, 0);
 
@@ -174,14 +184,16 @@ Value code_duplicate(Value context, void* /*data*/, Value argument)
 }
 Value duplicate = make_combinator(code_constant, 0);
 
+//operator*
 //lambda
-//condition
+
 //fix
+
 //source
-//enter
+//trace
+
 //module
 //function
-//operator*
 
 int main()
 {
