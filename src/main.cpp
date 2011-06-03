@@ -1,9 +1,26 @@
 #include <set>
 #include <map>
 #include <string>
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <assert.h>
+
+struct FileAssertRaiser
+{
+	FileAssertRaiser(bool condition, char const* file, int line, char const* msg)
+	{
+		if (!condition)
+		{
+			fprintf(stderr, "%s(%d): %s\n", file, line, msg);
+			exit(1);
+		}
+	}
+};
+#define STRINGIZE_DETAIL(x) #x
+#define STRINGIZE(x) STRINGIZE_DETAIL(x)
+#define ASSERT_OBJ_NAME_DETAIL(a, b) a##b
+#define ASSERT_OBJ_NAME(a, b) ASSERT_OBJ_NAME_DETAIL(a, b)
+#define ASSERT(x) namespace {FileAssertRaiser ASSERT_OBJ_NAME(assertObj, __LINE__)((x), __FILE__, __LINE__, #x);}
 
 struct Cell
 {
@@ -28,7 +45,7 @@ Cell* make_cell(void* head, void* tail)
 	return (*pos).second;
 }
 
-char const* intern(char const* s)
+char* intern(char const* s)
 {
 	using namespace std;
 
@@ -41,7 +58,7 @@ char const* intern(char const* s)
 		pos = symbol_map.insert(str).first;
 	}
 
-	return (*pos).c_str();
+	return (char*)(*pos).c_str();
 }
 
 struct Value
@@ -51,7 +68,71 @@ struct Value
 	Cell* cell;
 };
 
+bool operator==(Value const& l, Value const& r)
+{
+	return l.cell == r.cell;
+}
+
 typedef Value (* Code)(Value context, void* data, Value argument);
+
+template <typename T0, typename T1> struct Apply
+{
+	typedef T0 Function;
+	typedef T1 Argument;
+
+	Apply(T0 const& f, T1 const& a): function(f), argument(a) {}
+
+	operator Value() const;
+
+	Function function;
+	Argument argument;
+};
+
+Value evaluate(Value context, Value v)
+{
+	return v;
+}
+
+template <typename T0, typename T1> Value evaluate(
+		Value context, Apply<T0, T1> const& application)
+{
+	return apply(context, application.function, application.argument);
+}
+
+template <typename T0, typename T1> Apply<T0, T1>::operator Value() const
+{
+	return evaluate(Value(0), *this);
+}
+
+template <typename T0, typename T1>
+Apply<T0, T1> make_apply(T0 const& x0, T1 const& x1)
+{
+	return Apply<T0, T1>(x0, x1);
+}
+
+Apply<Value, Value> operator*(Value const& x0, Value const& x1)
+{
+	return make_apply(x0, x1);
+}
+
+template <typename T00, typename T01, typename T10, typename T11>
+Apply<Apply<T00, T01>, Apply<T10, T11> > operator*(
+		Apply<T00, T01> const& x0, Apply<T10, T11> const& x1)
+{
+	return make_apply(x0, x1);
+}
+
+template <typename T0, typename T1>
+Apply<Apply<T0, T1>, Value> operator*(Apply<T0, T1> const& x0, Value const& x1)
+{
+	return make_apply(x0, x1);
+}
+
+template <typename T0, typename T1>
+Apply<Value, Apply<T0, T1> > operator*(Value const& x0, Apply<T0, T1> const& x1)
+{
+	return make_apply(x0, x1);
+}
 
 Code* box_function(Code code)
 {
@@ -77,18 +158,9 @@ Value apply(Value context, Value function, Value argument)
 	return code(context, data, argument);
 }
 
-template <typename T0, typename T1> struct Apply
-{
-	typedef T0 Function;
-	typedef T1 Argument;
-
-	Function function;
-	Argument argument;
-};
-
 Value make_combinator(Code code, void* data)
 {
-	return Value(new Cell(box_function(code), 0));
+	return Value(make_cell(box_function(code), data));
 }
 
 //fail
@@ -96,6 +168,7 @@ Value code_fail1(Value context, void* data, Value argument)
 {
 	Cell* f0 = (Cell*)data;
 	fprintf(stderr, "fail\n");
+	assert(0);
 	exit(1);
 	return argument;
 }
@@ -129,6 +202,7 @@ Value code_compose(Value context, void* /*data*/, Value argument)
 {
 	return make_combinator(code_compose1, argument.cell);
 }
+
 Value compose = make_combinator(code_compose, 0);
 
 //flip
@@ -154,20 +228,23 @@ Value code_flip(Value context, void* /*data*/, Value argument)
 {
 	return make_combinator(code_flip1, argument.cell);
 }
+
 Value flip = make_combinator(code_flip, 0);
 
 //constant
-Value code_constant1(Value context, void* data, Value argument)
+Value code_constant1(Value context, void* data, Value /*argument*/)
 {
 	Cell* f0 = (Cell*)data;
 	assert(f0);
-	return apply(context, apply(context, Value(f0), argument), Value(f0));
+	return f0;
 }
 
 Value code_constant(Value context, void* /*data*/, Value argument)
 {
+	assert(argument.cell);
 	return make_combinator(code_constant1, argument.cell);
 }
+
 Value constant = make_combinator(code_constant, 0);
 
 //duplicate
@@ -175,16 +252,72 @@ Value code_duplicate1(Value context, void* data, Value argument)
 {
 	Cell* f0 = (Cell*)data;
 	assert(f0);
-	return f0;
+	return apply(context, apply(context, Value(f0), argument), argument);
 }
 
 Value code_duplicate(Value context, void* /*data*/, Value argument)
 {
 	return make_combinator(code_duplicate1, argument.cell);
 }
-Value duplicate = make_combinator(code_constant, 0);
 
-//operator*
+Value duplicate = make_combinator(code_duplicate, 0);
+
+ASSERT(compose * flip * constant * fail == flip * (constant * fail));
+ASSERT(compose == flip * constant * fail * compose);
+ASSERT(compose == constant * compose * fail);
+ASSERT(duplicate * compose * fail == compose * fail * fail);
+
+//identity
+Value identity = duplicate * constant;
+ASSERT(compose == identity * compose);
+
+//true_
+Value true_ = constant;
+ASSERT(true_ * duplicate * compose == duplicate);
+
+//false_
+Value false_ = constant * identity;
+ASSERT(false_ * duplicate * compose == compose);
+
+Value boolean(bool x)
+{
+	return x ? true_ : false_;
+}
+
+//cons
+Value cons = compose * flip * (flip * identity);
+ASSERT(identity * compose * fail == compose * fail);
+ASSERT(flip * identity * compose * constant == constant * compose);
+ASSERT(cons * fail * compose * true_ == fail);
+ASSERT(cons * fail * compose * false_ == compose);
+
+//car
+Value car = flip * identity * true_;
+ASSERT(car * (cons * fail * compose) == fail);
+
+//cdr
+Value cdr = flip * identity * false_;
+ASSERT(cdr * (cons * fail * compose) == compose);
+
+//symbol
+Value code_symbol(Value context, void* /*data*/, Value argument)
+{
+	assert(0);
+}
+
+Value symbol(char const* str)
+{
+	return make_combinator(code_fail, intern(str));
+}
+
+//symbolp
+Value code_symbolp(Value context, void* /*data*/, Value argument)
+{
+	assert(argument.cell);
+	Code* box = (Code*)argument.cell->head;
+	return boolean(*box == code_symbol);
+}
+
 //lambda
 
 //fix
@@ -199,4 +332,3 @@ int main()
 {
 	return 0;
 }
-
