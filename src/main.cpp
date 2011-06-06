@@ -177,7 +177,7 @@ Code* box_function(Code code)
 	return (*pos).second;
 }
 
-Value apply(Value context, Value function, Value argument)
+Value uapply(Value context, Value function, Value argument)
 {
 	Code code = *(Code*)(function.cell->head);
 	void* data = function.cell->tail;
@@ -189,10 +189,10 @@ Value make_combinator(Code code, void* data)
 	return Value(make_cell(box_function(code), data));
 }
 
-//fail
+//ufail
 Value code_fail1(Value /*context*/, void* /*data*/, Value argument)
 {
-	fprintf(stderr, "fail\n");
+	fprintf(stderr, "ufail\n");
 	ASSERT(0);
 	exit(1);
 	return argument;
@@ -202,9 +202,9 @@ Value code_fail(Value /*context*/, void* /*data*/, Value argument)
 {
 	return make_combinator(code_fail1, argument.cell);
 }
-Value fail = make_combinator(code_fail, 0);
+Value ufail = make_combinator(code_fail, 0);
 
-//compose
+//ucompose
 Value code_compose2(Value context, void* data, Value argument)
 {
 	Cell* fs = (Cell*)data;
@@ -213,7 +213,7 @@ Value code_compose2(Value context, void* data, Value argument)
 	ASSERT(f0);
 	Cell* f1 = (Cell*)(fs->tail);
 	ASSERT(f1);
-	return apply(context, Value(f0), apply(context, Value(f1), argument));
+	return uapply(context, Value(f0), uapply(context, Value(f1), argument));
 }
 
 Value code_compose1(Value /*context*/, void* data, Value argument)
@@ -228,9 +228,9 @@ Value code_compose(Value /*context*/, void* /*data*/, Value argument)
 	return make_combinator(code_compose1, argument.cell);
 }
 
-Value compose = make_combinator(code_compose, 0);
+Value ucompose = make_combinator(code_compose, 0);
 
-//flip
+//uflip
 Value code_flip2(Value context, void* data, Value argument)
 {
 	Cell* fs = (Cell*)data;
@@ -239,7 +239,7 @@ Value code_flip2(Value context, void* data, Value argument)
 	ASSERT(f0);
 	Cell* f1 = (Cell*)(fs->tail);
 	ASSERT(f1);
-	return apply(context, apply(context, Value(f0), argument), Value(f1));
+	return uapply(context, uapply(context, Value(f0), argument), Value(f1));
 }
 
 Value code_flip1(Value /*context*/, void* data, Value argument)
@@ -254,9 +254,9 @@ Value code_flip(Value /*context*/, void* /*data*/, Value argument)
 	return make_combinator(code_flip1, argument.cell);
 }
 
-Value flip = make_combinator(code_flip, 0);
+Value uflip = make_combinator(code_flip, 0);
 
-//constant
+//uconstant
 Value code_constant1(Value /*context*/, void* data, Value /*argument*/)
 {
 	Cell* f0 = (Cell*)data;
@@ -270,14 +270,14 @@ Value code_constant(Value /*context*/, void* /*data*/, Value argument)
 	return make_combinator(code_constant1, argument.cell);
 }
 
-Value constant = make_combinator(code_constant, 0);
+Value uconstant = make_combinator(code_constant, 0);
 
-//duplicate
+//uduplicate
 Value code_duplicate1(Value context, void* data, Value argument)
 {
 	Cell* f0 = (Cell*)data;
 	ASSERT(f0);
-	return apply(context, apply(context, Value(f0), argument), argument);
+	return uapply(context, uapply(context, Value(f0), argument), argument);
 }
 
 Value code_duplicate(Value /*context*/, void* /*data*/, Value argument)
@@ -285,13 +285,13 @@ Value code_duplicate(Value /*context*/, void* /*data*/, Value argument)
 	return make_combinator(code_duplicate1, argument.cell);
 }
 
-Value duplicate = make_combinator(code_duplicate, 0);
+Value uduplicate = make_combinator(code_duplicate, 0);
 
 // DSL
 Value evaluate(Value context, Expression expr);
 
-Value::Value(Expression expr)
-	: cell(evaluate(Value(0), expr).cell)
+	Value::Value(Expression expr)
+: cell(evaluate(Value(0), expr).cell)
 {
 }
 
@@ -319,51 +319,51 @@ Expression operator*(Value const& x0, Expression x1)
 //operator+
 Expression operator+(Value const& x0, Value const& x1)
 {
-	return compose * x0 * x1;
+	return ucompose * x0 * x1;
 }
 
 Expression operator+(Expression x0, Expression x1)
 {
-	return compose * x0 * x1;
+	return ucompose * x0 * x1;
 }
 
 Expression operator+(Expression x0, Value const& x1)
 {
-	return compose * x0 * x1;
+	return ucompose * x0 * x1;
 }
 
 Expression operator+(Value const& x0, Expression x1)
 {
-	return compose * x0 * x1;
+	return ucompose * x0 * x1;
 }
 
-ASSERT((flip + constant) * fail == flip * (constant * fail));
-ASSERT(compose == flip * constant * fail * compose);
-ASSERT(compose == constant * compose * fail);
-ASSERT(duplicate * compose * fail == fail + fail);
+ASSERT((uflip + uconstant) * ufail == uflip * (uconstant * ufail));
+ASSERT(ucompose == uflip * uconstant * ufail * ucompose);
+ASSERT(ucompose == uconstant * ucompose * ufail);
+ASSERT(uduplicate * ucompose * ufail == ufail + ufail);
 
-//identity
-Value identity = duplicate * constant;
-ASSERT(compose == identity * compose);
+//uidentity
+Value uidentity = uduplicate * uconstant;
+ASSERT(ucompose == uidentity * ucompose);
 
-//true_
-Value true_ = constant;
-ASSERT(true_ * duplicate * compose == duplicate);
+//utrue
+Value utrue = uconstant;
+ASSERT(utrue * uduplicate * ucompose == uduplicate);
 
-//false_
-Value false_ = constant * identity;
-ASSERT(false_ * duplicate * compose == compose);
+//ufalse
+Value ufalse = uconstant * uidentity;
+ASSERT(ufalse * uduplicate * ucompose == ucompose);
 
 Value boolean(bool x)
 {
-	return x ? true_ : false_;
+	return x ? utrue : ufalse;
 }
 
-//code
+//ucode
 Value code_code(Value /*context*/, void* /*data*/, Value /*argument*/)
 {
 	ASSERT(0);
-	return fail;
+	return ufail;
 }
 
 Value make_code(Code* code)
@@ -371,7 +371,7 @@ Value make_code(Code* code)
 	return make_combinator(code_code, code);
 }
 
-//codeof
+//ucodeof
 Value code_codeof(Value /*context*/, void* /*data*/, Value argument)
 {
 	ASSERT(argument.cell);
@@ -380,18 +380,18 @@ Value code_codeof(Value /*context*/, void* /*data*/, Value argument)
 	return make_code(code);
 }
 
-Value codeof = make_combinator(code_codeof, 0);
-ASSERT(codeof * fail == codeof * fail);
-ASSERT(codeof * compose != codeof * fail);
+Value ucodeof = make_combinator(code_codeof, 0);
+ASSERT(ucodeof * ufail == ucodeof * ufail);
+ASSERT(ucodeof * ucompose != ucodeof * ufail);
 
-//cons
-Value cons = flip + (flip * identity);
-ASSERT(identity * compose * fail == compose * fail);
-ASSERT(flip * identity * compose * constant == constant * compose);
-ASSERT(cons * fail * compose * true_ == fail);
-ASSERT(cons * fail * compose * false_ == compose);
+//ucons
+Value ucons = uflip + (uflip * uidentity);
+ASSERT(uidentity * ucompose * ufail == ucompose * ufail);
+ASSERT(uflip * uidentity * ucompose * uconstant == uconstant * ucompose);
+ASSERT(ucons * ufail * ucompose * utrue == ufail);
+ASSERT(ucons * ufail * ucompose * ufalse == ucompose);
 
-//identical
+//uidentical
 Value code_identical1(Value /*context*/, void* data, Value argument)
 {
 	Cell* f0 = (Cell*)data;
@@ -405,55 +405,55 @@ Value code_identical(Value /*context*/, void* /*data*/, Value argument)
 	return make_combinator(code_identical1, argument.cell);
 }
 
-Value identical = make_combinator(code_identical, 0);
-ASSERT(identical * fail * fail == true_);
-ASSERT(identical * fail * compose == false_);
+Value uidentical = make_combinator(code_identical, 0);
+ASSERT(uidentical * ufail * ufail == utrue);
+ASSERT(uidentical * ufail * ucompose == ufalse);
 
-//composep
+//ucomposep
 namespace detail
 {
-	Value compose_sample0 = fail + fail;
-	Value compose_code = codeof * compose_sample0;
-	Value compose_sample1 = true_ + false_;
+	Value compose_sample0 = ufail + ufail;
+	Value compose_code = ucodeof * compose_sample0;
+	Value compose_sample1 = utrue + ufalse;
 }
-Value composep = identical * detail::compose_code + codeof;
-ASSERT(false_ == composep * fail);
-ASSERT(true_ == composep * detail::compose_sample1);
+Value ucomposep = uidentical * detail::compose_code + ucodeof;
+ASSERT(ufalse == ucomposep * ufail);
+ASSERT(utrue == ucomposep * detail::compose_sample1);
 
-//consp
+//uconsp
 //TODO: Implement properly.
 namespace detail
 {
-	Value flip2_code = codeof * (flip * fail * true_);
+	Value flip2_code = ucodeof * (uflip * ufail * utrue);
 }
-Value consp = identical * detail::flip2_code + codeof;
-ASSERT(consp * (cons * fail * false_) == true_);
-ASSERT(consp * cons == false_);
-ASSERT(consp * identity == false_);
-ASSERT(consp * (cons * true_) == false_);
-ASSERT(consp * (cons * (cons * true_ * true_) * false_) == true_);
+Value uconsp = uidentical * detail::flip2_code + ucodeof;
+ASSERT(uconsp * (ucons * ufail * ufalse) == utrue);
+ASSERT(uconsp * ucons == ufalse);
+ASSERT(uconsp * uidentity == ufalse);
+ASSERT(uconsp * (ucons * utrue) == ufalse);
+ASSERT(uconsp * (ucons * (ucons * utrue * utrue) * ufalse) == utrue);
 
-//car
-Value car = flip * identity * true_;
-ASSERT(car * (cons * fail * compose) == fail);
+//ucar
+Value ucar = uflip * uidentity * utrue;
+ASSERT(ucar * (ucons * ufail * ucompose) == ufail);
 
-//cdr
-Value cdr = flip * identity * false_;
-ASSERT(cdr * (cons * fail * compose) == compose);
+//ucdr
+Value ucdr = uflip * uidentity * ufalse;
+ASSERT(ucdr * (ucons * ufail * ucompose) == ucompose);
 
-//symbol
+//usymbol
 Value code_symbol(Value /*context*/, void* /*data*/, Value /*argument*/)
 {
 	ASSERT(0);
-	return fail;
+	return ufail;
 }
 
-Value symbol(char const* str)
+Value usymbol(char const* str)
 {
 	return make_combinator(code_fail, intern(str));
 }
 
-//symbolp
+//usymbolp
 Value code_symbolp(Value /*context*/, void* /*data*/, Value argument)
 {
 	ASSERT(argument.cell);
@@ -461,81 +461,75 @@ Value code_symbolp(Value /*context*/, void* /*data*/, Value argument)
 	return boolean(*box == code_symbol);
 }
 
-Value symbolp = make_combinator(code_symbolp, 0);
+Value usymbolp = make_combinator(code_symbolp, 0);
 
-// nil
-Value nil = symbol("nil");
+//ucurry
+//Value ucurry = ulambda(f) {ulambda(x) {ulambda(y) {f * (ucons * x * y)}}}
+//            = ulambda(f) {ulambda(x) {ulambda(y) {(f + (ucons * x)) * y)}}}
+ASSERT(ucompose * (ucons * ufalse * utrue) == (ucompose + (ucons * ufalse)) * utrue);
+ASSERT(uflip * (ucons * ufail * ucompose) == (uflip + (ucons * ufail)) * ucompose);
+//            = labmda(f) {ulambda(x) {f + ucons * x}}
+//            = ulambda(f) {ulambda(x) {ucompose * f * (ucons * x)}}
+ASSERT(ucompose + ucons * utrue == ucompose * ucompose * (ucons * utrue));
+ASSERT(uflip + ucons * ufail == ucompose * uflip * (ucons * ufail));
+//            = ulambda(f) {ulambda(x) {ucompose * (ucompose * f) * ucons * x}}
+ASSERT(ucompose * ucompose * (ucons * utrue) == ucompose * (ucompose * ucompose) * ucons * utrue);
+ASSERT(ucompose * uflip * (ucons * ufail) == ucompose * (ucompose * uflip) * ucons * ufail);
+//            = ulambda(f) {ucompose * (ucompose * f) * ucons}
+//            = ulambda(f) {ucompose * ucompose * ucompose * f * ucons}
+ASSERT(ucompose * (ucompose * ucompose) * ucons == ucompose * ucompose * ucompose * ucompose * ucons);
+ASSERT(ucompose * (ucompose * uflip) * ucons == ucompose * ucompose * ucompose * uflip * ucons);
+//            = ulambda(f) {uflip * (ucompose * ucompose * ucompose) * ucons * f}
+ASSERT(ucompose * ucompose * ucompose * ucompose * ucons == uflip * (ucompose * ucompose * ucompose) * ucons * ucompose);
+ASSERT(ucompose * ucompose * ucompose * uflip * ucons == uflip * (ucompose * ucompose * ucompose) * ucons * uflip);
+//            = uflip * (ucompose * ucompose * ucompose) * ucons
+Value ucurry = uflip * (ucompose * ucompose * ucompose) * ucons;
+ASSERT(ucurry * ucar * utrue * ufalse == utrue);
+ASSERT(ucurry * ucdr * utrue * ufalse == ufalse);
 
-// nilp
-Value nilp = identical * nil;
-
-//curry
-//Value curry = lambda(f) {lambda(x) {lambda(y) {f * (cons * x * y)}}}
-//            = lambda(f) {lambda(x) {lambda(y) {(f + (cons * x)) * y)}}}
-ASSERT(compose * (cons * false_ * true_) == (compose + (cons * false_)) * true_);
-ASSERT(flip * (cons * fail * compose) == (flip + (cons * fail)) * compose);
-//            = labmda(f) {lambda(x) {f + cons * x}}
-//            = lambda(f) {lambda(x) {compose * f * (cons * x)}}
-ASSERT(compose + cons * true_ == compose * compose * (cons * true_));
-ASSERT(flip + cons * fail == compose * flip * (cons * fail));
-//            = lambda(f) {lambda(x) {compose * (compose * f) * cons * x}}
-ASSERT(compose * compose * (cons * true_) == compose * (compose * compose) * cons * true_);
-ASSERT(compose * flip * (cons * fail) == compose * (compose * flip) * cons * fail);
-//            = lambda(f) {compose * (compose * f) * cons}
-//            = lambda(f) {compose * compose * compose * f * cons}
-ASSERT(compose * (compose * compose) * cons == compose * compose * compose * compose * cons);
-ASSERT(compose * (compose * flip) * cons == compose * compose * compose * flip * cons);
-//            = lambda(f) {flip * (compose * compose * compose) * cons * f}
-ASSERT(compose * compose * compose * compose * cons == flip * (compose * compose * compose) * cons * compose);
-ASSERT(compose * compose * compose * flip * cons == flip * (compose * compose * compose) * cons * flip);
-//            = flip * (compose * compose * compose) * cons
-Value curry = flip * (compose * compose * compose) * cons;
-ASSERT(curry * car * true_ * false_ == true_);
-ASSERT(curry * cdr * true_ * false_ == false_);
-
-//uncurry
+//uuncurry
 namespace detail
 {
-	Value pair_sample0 = cons * false_ * true_;
-	Value pair_sample1 = cons * true_ * symbolp;
+	Value pair_sample0 = ucons * ufalse * utrue;
+	Value pair_sample1 = ucons * utrue * usymbolp;
 }
-//Value uncurry = lambda(f) {lambda(p) {f * (car * p) * (cdr * p)}}
-//              = lambda(f) {lambda(p) {compose * f * car * p * (cdr * p)}}
-ASSERT(flip * (car * detail::pair_sample0) * (cdr * detail::pair_sample0) == compose * flip * car * detail::pair_sample0 * (cdr * detail::pair_sample0));
-ASSERT(duplicate * (car * detail::pair_sample1) * (cdr * detail::pair_sample1) == compose * duplicate * car * detail::pair_sample1 * (cdr * detail::pair_sample1));
-//              = lambda(f) {lambda(p) {flip * (compose * f * car) * (cdr * p) * p}}
-ASSERT(compose * flip * car * detail::pair_sample0 * (cdr * detail::pair_sample0) == flip * (compose * flip * car) * (cdr * detail::pair_sample0) * detail::pair_sample0);
-ASSERT(compose * duplicate * car * detail::pair_sample1 * (cdr * detail::pair_sample1) == flip * (compose * duplicate * car) * (cdr * detail::pair_sample1) * detail::pair_sample1);
-//              = lambda(f) {lambda(p) {compose * (flip * (compose * f * car)) * cdr * p * p}}
-ASSERT(flip * (compose * flip * car) * (cdr * detail::pair_sample0) * detail::pair_sample0 == compose * (flip * (compose * flip * car)) * cdr * detail::pair_sample0 * detail::pair_sample0);
-ASSERT(flip * (compose * duplicate * car) * (cdr * detail::pair_sample1) * detail::pair_sample1 == compose * (flip * (compose * duplicate * car)) * cdr * detail::pair_sample1 * detail::pair_sample1);
-//              = lambda(f) {lambda(p) {duplicate * (compose * (flip * (compose * f * car)) * cdr) * p}}
-ASSERT(compose * (flip * (compose * flip * car)) * cdr * detail::pair_sample0 * detail::pair_sample0 == duplicate * (compose * (flip * (compose * flip * car)) * cdr) * detail::pair_sample0);
-ASSERT(compose * (flip * (compose * duplicate * car)) * cdr * detail::pair_sample1 * detail::pair_sample1 == duplicate * (compose * (flip * (compose * duplicate * car)) * cdr) * detail::pair_sample1);
+//Value uuncurry = ulambda(f) {ulambda(p) {f * (ucar * p) * (ucdr * p)}}
+//              = ulambda(f) {ulambda(p) {ucompose * f * ucar * p * (ucdr * p)}}
+ASSERT(uflip * (ucar * detail::pair_sample0) * (ucdr * detail::pair_sample0) == ucompose * uflip * ucar * detail::pair_sample0 * (ucdr * detail::pair_sample0));
+ASSERT(uduplicate * (ucar * detail::pair_sample1) * (ucdr * detail::pair_sample1) == ucompose * uduplicate * ucar * detail::pair_sample1 * (ucdr * detail::pair_sample1));
+//              = ulambda(f) {ulambda(p) {uflip * (ucompose * f * ucar) * (ucdr * p) * p}}
+ASSERT(ucompose * uflip * ucar * detail::pair_sample0 * (ucdr * detail::pair_sample0) == uflip * (ucompose * uflip * ucar) * (ucdr * detail::pair_sample0) * detail::pair_sample0);
+ASSERT(ucompose * uduplicate * ucar * detail::pair_sample1 * (ucdr * detail::pair_sample1) == uflip * (ucompose * uduplicate * ucar) * (ucdr * detail::pair_sample1) * detail::pair_sample1);
+//              = ulambda(f) {ulambda(p) {ucompose * (uflip * (ucompose * f * ucar)) * ucdr * p * p}}
+ASSERT(uflip * (ucompose * uflip * ucar) * (ucdr * detail::pair_sample0) * detail::pair_sample0 == ucompose * (uflip * (ucompose * uflip * ucar)) * ucdr * detail::pair_sample0 * detail::pair_sample0);
+ASSERT(uflip * (ucompose * uduplicate * ucar) * (ucdr * detail::pair_sample1) * detail::pair_sample1 == ucompose * (uflip * (ucompose * uduplicate * ucar)) * ucdr * detail::pair_sample1 * detail::pair_sample1);
+//              = ulambda(f) {ulambda(p) {uduplicate * (ucompose * (uflip * (ucompose * f * ucar)) * ucdr) * p}}
+ASSERT(ucompose * (uflip * (ucompose * uflip * ucar)) * ucdr * detail::pair_sample0 * detail::pair_sample0 == uduplicate * (ucompose * (uflip * (ucompose * uflip * ucar)) * ucdr) * detail::pair_sample0);
+ASSERT(ucompose * (uflip * (ucompose * uduplicate * ucar)) * ucdr * detail::pair_sample1 * detail::pair_sample1 == uduplicate * (ucompose * (uflip * (ucompose * uduplicate * ucar)) * ucdr) * detail::pair_sample1);
 //
-//              = lambda(f) {duplicate * (compose * (flip * (compose * f * car)) * cdr)}
-//              = lambda(f) {duplicate * (compose * (flip * (flip * compose * car * f)) * cdr)}
-ASSERT(duplicate * (compose * (flip * (compose * flip * car)) * cdr) == duplicate * (compose * (flip * (flip * compose * car * flip)) * cdr));
-ASSERT(duplicate * (compose * (flip * (compose * duplicate * car)) * cdr) == duplicate * (compose * (flip * (flip * compose * car * duplicate)) * cdr));
-//              = lambda(f) {duplicate * (compose * (compose * flip * (flip * compose * car) * f) * cdr)}
-ASSERT(duplicate * (compose * (flip * (flip * compose * car * flip)) * cdr) == duplicate * (compose * (compose * flip * (flip * compose * car) * flip) * cdr));
-ASSERT(duplicate * (compose * (flip * (flip * compose * car * duplicate)) * cdr) == duplicate * (compose * (compose * flip * (flip * compose * car) * duplicate) * cdr));
-//              = lambda(f) {duplicate * (compose * compose * (compose * flip * (flip * compose * car)) * f * cdr)}
-ASSERT(duplicate * (compose * (compose * flip * (flip * compose * car) * flip) * cdr) == duplicate * (compose * compose * (compose * flip * (flip * compose * car)) * flip * cdr));
-ASSERT(duplicate * (compose * (compose * flip * (flip * compose * car) * duplicate) * cdr) == duplicate * (compose * compose * (compose * flip * (flip * compose * car)) * duplicate * cdr));
-//              = lambda(f) {duplicate * (flip * (compose * compose * (compose * flip * (flip * compose * car))) * cdr * f)}
-ASSERT(duplicate * (compose * compose * (compose * flip * (flip * compose * car)) * flip * cdr) == duplicate * (flip * (compose * compose * (compose * flip * (flip * compose * car))) * cdr * flip));
-ASSERT(duplicate * (compose * compose * (compose * flip * (flip * compose * car)) * duplicate * cdr) == duplicate * (flip * (compose * compose * (compose * flip * (flip * compose * car))) * cdr * duplicate));
-//              = lambda(f) {compose * duplicate * (flip * (compose * compose * (compose * flip * (flip * compose * car))) * cdr) * f}
-ASSERT(duplicate * (flip * (compose * compose * (compose * flip * (flip * compose * car))) * cdr * flip) == compose * duplicate * (flip * (compose * compose * (compose * flip * (flip * compose * car))) * cdr) * flip);
-ASSERT(duplicate * (flip * (compose * compose * (compose * flip * (flip * compose * car))) * cdr * duplicate) == compose * duplicate * (flip * (compose * compose * (compose * flip * (flip * compose * car))) * cdr) * duplicate);
+//              = ulambda(f) {uduplicate * (ucompose * (uflip * (ucompose * f * ucar)) * ucdr)}
+//              = ulambda(f) {uduplicate * (ucompose * (uflip * (uflip * ucompose * ucar * f)) * ucdr)}
+ASSERT(uduplicate * (ucompose * (uflip * (ucompose * uflip * ucar)) * ucdr) == uduplicate * (ucompose * (uflip * (uflip * ucompose * ucar * uflip)) * ucdr));
+ASSERT(uduplicate * (ucompose * (uflip * (ucompose * uduplicate * ucar)) * ucdr) == uduplicate * (ucompose * (uflip * (uflip * ucompose * ucar * uduplicate)) * ucdr));
+//              = ulambda(f) {uduplicate * (ucompose * (ucompose * uflip * (uflip * ucompose * ucar) * f) * ucdr)}
+ASSERT(uduplicate * (ucompose * (uflip * (uflip * ucompose * ucar * uflip)) * ucdr) == uduplicate * (ucompose * (ucompose * uflip * (uflip * ucompose * ucar) * uflip) * ucdr));
+ASSERT(uduplicate * (ucompose * (uflip * (uflip * ucompose * ucar * uduplicate)) * ucdr) == uduplicate * (ucompose * (ucompose * uflip * (uflip * ucompose * ucar) * uduplicate) * ucdr));
+//              = ulambda(f) {uduplicate * (ucompose * ucompose * (ucompose * uflip * (uflip * ucompose * ucar)) * f * ucdr)}
+ASSERT(uduplicate * (ucompose * (ucompose * uflip * (uflip * ucompose * ucar) * uflip) * ucdr) == uduplicate * (ucompose * ucompose * (ucompose * uflip * (uflip * ucompose * ucar)) * uflip * ucdr));
+ASSERT(uduplicate * (ucompose * (ucompose * uflip * (uflip * ucompose * ucar) * uduplicate) * ucdr) == uduplicate * (ucompose * ucompose * (ucompose * uflip * (uflip * ucompose * ucar)) * uduplicate * ucdr));
+//              = ulambda(f) {uduplicate * (uflip * (ucompose * ucompose * (ucompose * uflip * (uflip * ucompose * ucar))) * ucdr * f)}
+ASSERT(uduplicate * (ucompose * ucompose * (ucompose * uflip * (uflip * ucompose * ucar)) * uflip * ucdr) == uduplicate * (uflip * (ucompose * ucompose * (ucompose * uflip * (uflip * ucompose * ucar))) * ucdr * uflip));
+ASSERT(uduplicate * (ucompose * ucompose * (ucompose * uflip * (uflip * ucompose * ucar)) * uduplicate * ucdr) == uduplicate * (uflip * (ucompose * ucompose * (ucompose * uflip * (uflip * ucompose * ucar))) * ucdr * uduplicate));
+//              = ulambda(f) {ucompose * uduplicate * (uflip * (ucompose * ucompose * (ucompose * uflip * (uflip * ucompose * ucar))) * ucdr) * f}
+ASSERT(uduplicate * (uflip * (ucompose * ucompose * (ucompose * uflip * (uflip * ucompose * ucar))) * ucdr * uflip) == ucompose * uduplicate * (uflip * (ucompose * ucompose * (ucompose * uflip * (uflip * ucompose * ucar))) * ucdr) * uflip);
+ASSERT(uduplicate * (uflip * (ucompose * ucompose * (ucompose * uflip * (uflip * ucompose * ucar))) * ucdr * uduplicate) == ucompose * uduplicate * (uflip * (ucompose * ucompose * (ucompose * uflip * (uflip * ucompose * ucar))) * ucdr) * uduplicate);
 
-Value uncurry = compose * duplicate * (flip * (compose * compose * (compose * flip * (flip * compose * car))) * cdr);
+Value uuncurry = ucompose * uduplicate * (uflip * (ucompose * ucompose * (ucompose * uflip * (uflip * ucompose * ucar))) * ucdr);
 
-ASSERT(uncurry * true_ * (cons * true_ * false_) == true_);
-ASSERT(uncurry * false_ * (cons * true_ * false_) == false_);
+ASSERT(uuncurry * utrue * (ucons * utrue * ufalse) == utrue);
+ASSERT(uuncurry * ufalse * (ucons * utrue * ufalse) == ufalse);
 
-//arg
+//uarg
 Value code_arg(Value /*context*/, void* /*data*/, Value argument)
 {
 	ASSERT(0);
@@ -543,57 +537,57 @@ Value code_arg(Value /*context*/, void* /*data*/, Value argument)
 	return argument;
 }
 
-Expression arg(char const* sym)
+Expression uarg(char const* sym)
 {
-	return ExpressionNode::make(make_combinator(code_arg, symbol(sym).cell));
+	return ExpressionNode::make(make_combinator(code_arg, usymbol(sym).cell));
 }
 
-//substitute
+//usubstitute
 //Sxyz = xz(yz)
-Value substitute = compose * (compose * duplicate) * (compose * compose * flip);
-ASSERT(substitute * compose * flip * duplicate == compose * duplicate * (flip * duplicate));
-ASSERT(substitute * flip * compose * constant == flip * constant * (compose * constant));
+Value usubstitute = ucompose * (ucompose * uduplicate) * (ucompose * ucompose * uflip);
+ASSERT(usubstitute * ucompose * uflip * uduplicate == ucompose * uduplicate * (uflip * uduplicate));
+ASSERT(usubstitute * uflip * ucompose * uconstant == uflip * uconstant * (ucompose * uconstant));
 
-//lambda
-Expression lambda(char const* param, Expression expr)
+//ulambda
+Expression ulambda(char const* param, Expression expr)
 {
-	return ExpressionNode::make_lambda(arg(param), expr);
+	return ExpressionNode::make_lambda(uarg(param), expr);
 }
 
-//ASSERT(identity == lambda("x", arg("x")));
-ASSERT(lambda("x", compose) * fail == compose);
-ASSERT(lambda("x", arg("x")) == identity);
-ASSERT(lambda("x", compose * compose) * fail == compose * compose);
-ASSERT(lambda("x", flip * arg("x")) * cons * true_ * false_ == cons * false_ * true_);
-ASSERT(lambda("x", compose * arg("x") * (flip * arg("x"))) * fail == substitute * compose * flip * fail);
-ASSERT(lambda("x", lambda("y", arg("x") * arg("y"))) * flip * compose == flip * compose);
-ASSERT(lambda("x", lambda("y", arg("x") * arg("y") * (arg("y") * arg("x")))) * flip * compose == flip * compose * (compose * flip));
+//ASSERT(uidentity == ulambda("x", uarg("x")));
+ASSERT(ulambda("x", ucompose) * ufail == ucompose);
+ASSERT(ulambda("x", uarg("x")) == uidentity);
+ASSERT(ulambda("x", ucompose * ucompose) * ufail == ucompose * ucompose);
+ASSERT(ulambda("x", uflip * uarg("x")) * ucons * utrue * ufalse == ucons * ufalse * utrue);
+ASSERT(ulambda("x", ucompose * uarg("x") * (uflip * uarg("x"))) * ufail == usubstitute * ucompose * uflip * ufail);
+ASSERT(ulambda("x", ulambda("y", uarg("x") * uarg("y"))) * uflip * ucompose == uflip * ucompose);
+ASSERT(ulambda("x", ulambda("y", uarg("x") * uarg("y") * (uarg("y") * uarg("x")))) * uflip * ucompose == uflip * ucompose * (ucompose * uflip));
 
-//fix
+//ufix
 //(define applicative-order-y
-//  (lambda (f)
-//    ((lambda (x) 
-//       (f (lambda (arg) ((x x) arg))))
-//     (lambda (x) 
-//       (f (lambda (arg) ((x x) arg)))))))
-Value fix = lambda("f",
-		lambda("x", arg("f") * lambda("y", (arg("x") * arg("x")) * arg("y"))) *
-		lambda("x", arg("f") * lambda("y", (arg("x") * arg("x")) * arg("y"))));
+//  (ulambda (f)
+//    ((ulambda (x) 
+//       (f (ulambda (uarg) ((x x) uarg))))
+//     (ulambda (x) 
+//       (f (ulambda (uarg) ((x x) uarg)))))))
+Value ufix = ulambda("f",
+		ulambda("x", uarg("f") * ulambda("y", (uarg("x") * uarg("x")) * uarg("y"))) *
+		ulambda("x", uarg("f") * ulambda("y", (uarg("x") * uarg("x")) * uarg("y"))));
 
 namespace detail
 {
-	Value inc = cons * cons;
+	Value inc = ucons * ucons;
 
-	Value recurse_sample_gen = lambda("t",
-			lambda("f",
-				lambda("l",
-					((cons *
-					  (constant * arg("l")) *
-					  arg("f")) *
-					 (identical * arg("t") * arg("l"))) *
-					(inc * arg("l")))));
+	Value recurse_sample_gen = ulambda("t",
+			ulambda("f",
+				ulambda("l",
+					((ucons *
+					  (uconstant * uarg("l")) *
+					  uarg("f")) *
+					 (uidentical * uarg("t") * uarg("l"))) *
+					(inc * uarg("l")))));
 
-	Value initial = (cons * true_ * false_);
+	Value initial = (ucons * utrue * ufalse);
 	Value recurse_sample0 = recurse_sample_gen * initial;
 
 	Value second = (inc * initial);
@@ -601,87 +595,106 @@ namespace detail
 
 	Value third = (inc * second);
 
-	Value fix_sample = fix * (recurse_sample_gen * third);
+	Value fix_sample = ufix * (recurse_sample_gen * third);
 }
 
-ASSERT(detail::recurse_sample0 * fail * detail::initial == detail::initial);
-ASSERT(detail::recurse_sample1 * identity * detail::initial == detail::second);
+ASSERT(detail::recurse_sample0 * ufail * detail::initial == detail::initial);
+ASSERT(detail::recurse_sample1 * uidentity * detail::initial == detail::second);
 ASSERT(detail::fix_sample * detail::initial == detail::third);
 
+//ucheck
+Value ucheck = ulambda("m", ulambda("c",
+			(ucons *
+			 uidentity *
+			 (ufail * uarg("m"))) *
+			uarg("c") * utrue));
+
+ASSERT(uidentity * (ucheck * usymbol("test_message") * utrue) == utrue);
+
+//uif
+Value uif = ulambda("c", ulambda("t", ulambda("f",
+				ucons * uarg("t") * uarg("f") * uarg("c"))));
+ASSERT(uif * utrue * uflip * uconstant == uflip);
+ASSERT(uif * ufalse * uflip * uconstant == uconstant);
+
+//uconditional
+Value udefault = usymbol("default");
+Value uconditional_recurse_step = ulambda("uconditional_recurse",
+		ulambda("h", ulambda("c", ulambda("v",
+					(uif * (uidentical * udefault * uarg("c")) *
+					 (uarg("h") * uarg("v")) *
+					 (uarg("uconditional_recurse") *
+					  (ulambda("d",
+							   uarg("h") * (uif * uarg("c") * uarg("v") * uarg("d"))))))))));
+ASSERT(uconditional_recurse_step * uidentity * uidentity * udefault * uduplicate == uduplicate);
+Value uconditional_recurse = ufix * uconditional_recurse_step;
+Value uconditional = uconditional_recurse * uidentity;
+ASSERT(uconditional * udefault * uduplicate == uduplicate);
+ASSERT(uconditional * utrue * uflip * udefault * uduplicate == uflip);
+ASSERT(uconditional * ufalse * uflip * udefault * uduplicate == uduplicate);
+ASSERT(uconditional * ufalse * ucons * ufalse * uflip * udefault * uconstant == uconstant);
+ASSERT(uconditional * utrue * ucons * ufalse * uflip * udefault * uconstant == ucons);
+
+//uTag
+//uis
+//uMorphism
+//umaps
+//uProduct
+//uboth
+//uSum
+//ueither
+
+//uSymbol
+Value uSymbol = usymbol("Symbol");
+
+//Type
+Value make_Type = ulambda("make_Type", ulambda("member",
+			(uconditional *
+
+			 (uidentical * usymbol("Type") * uarg("member")) *
+			 ulambda("selector",
+				 (uarg("selector") *
+				  (uarg("make_Type") * usymbol("Type")) *
+				  uSymbol)) *
+
+			 udefault * ufail
+			 )));
+Value Type = ufix * make_Type * usymbol("Type");
+ASSERT(ucdr * Type == uSymbol);
+ASSERT(ucdr * (ucar * Type) == uSymbol);
+ASSERT(ucdr * (ucar * (ucar * Type)) == uSymbol);
+
 //tapply
-Value tapply = lambda("f", lambda("x",
-			lambda("p",
-				(cons *
-				 (car * arg("p")) *
-				 ((cdr * arg("p")) * (cdr * arg("x"))))) *
-			(cdr * arg("f") * (car * arg("x")))));
+Value tapply = ulambda("f", ulambda("x",
+			ulambda("p",
+				(ucons *
+				 (ucar * uarg("p")) *
+				 ((ucdr * uarg("p")) * (ucdr * uarg("x"))))) *
+			(ucdr * uarg("f") * (ucar * uarg("x")))));
 
 //tcompose
-//Value tcompose = lambda("f", lambda("g",
-//			(cons *
-//			 (compose_type * (car * arg("f")) * (car * arg("g"))) *
-//			 (compose
+//Value tcompose = ulambda("f", ulambda("g",
+//			(ucons *
+//			 (compose_type * (ucar * uarg("f")) * (ucar * uarg("g"))) *
+//			 (ucompose
 
 //tflip
-//Value tflip = lambda("f",
-//		(cons *
-//		 (flip_type * (car * arg("f"))) *
-//		 (flip * (cdr * arg("f")))));
+//Value tflip = ulambda("f",
+//		(ucons *
+//		 (flip_type * (ucar * uarg("f"))) *
+//		 (uflip * (ucdr * uarg("f")))));
 
 //tduplicate
-//Value tduplicate = lambda("f",
-//		(cons *
-//		 (duplicate_type * (car * arg("f"))) *
-//		 (duplicate * (cdr * arg("f")))));
+//Value tduplicate = ulambda("f",
+//		(ucons *
+//		 (duplicate_type * (ucar * uarg("f"))) *
+//		 (uduplicate * (ucdr * uarg("f")))));
 
 //tconstant
-//Value tconstant = lambda("f",
-//		(cons *
-//		 (constant_type * (car * arg("f"))) *
-//		 (constant * (cdr * arg("f")))));
-
-Value sample_type = symbol("type!");
-Value sample_value = symbol("value");
-Value sample_instance = cons * sample_type * sample_value;
-
-//check
-Value check = lambda("m", lambda("c",
-			(cons *
-			 identity *
-			 (fail * arg("m"))) *
-			arg("c") * true_));
-
-ASSERT(identity * (check * symbol("test_message") * true_) == true_);
-
-//concept_tag
-Value concept_tag = symbol("concept_requirement");
-
-//concept_nil
-Value concept_nil = cons * concept_tag * nil;
-
-//conceptp
-//Value conceptp = lambda("c", 
-
-//concept_cons
-//Value concept_cons = lambda("r", lambda("c",
-//			check * symbol("not a concept") * (conceptp * arg("c"))
-
-//concept_requirement
-Value concept_requirement = lambda("name", lambda("type",
-			cons * concept_tag * (cons * arg("name") * arg("type"))));
-
-//model_nil
-//model_cons
-//model_provision
-//model_lookup
-
-//tlambda
-
-//source
-//trace
-
-//module
-//function
+//Value tconstant = ulambda("f",
+//		(ucons *
+//		 (constant_type * (ucar * uarg("f"))) *
+//		 (uconstant * (ucdr * uarg("f")))));
 
 int main()
 {
@@ -703,15 +716,15 @@ Expression eliminate_lambda(Expression expr)
 	Value param = *expr.ptr->lambda_arg;
 	Expression subexpr = expr.ptr->function;
 	if (subexpr.is_leaf() && *subexpr.ptr->value == param)
-		return ExpressionNode::make(identity);
+		return ExpressionNode::make(uidentity);
 	if (subexpr.is_leaf())
-		return ExpressionNode::make(ExpressionNode::make(constant), subexpr);
+		return ExpressionNode::make(ExpressionNode::make(uconstant), subexpr);
 	if (subexpr.is_lambda())
 		return eliminate_lambda(ExpressionNode::make_lambda(param, eliminate_lambda(subexpr)));
 	//T[Lx.(E1 E2)] => (S T[Lx.E1] T[Lx.E2])
 	Expression subfunction = subexpr.ptr->function;
 	Expression subargument = subexpr.ptr->argument;
-	return ExpressionNode::make(ExpressionNode::make(ExpressionNode::make(substitute),
+	return ExpressionNode::make(ExpressionNode::make(ExpressionNode::make(usubstitute),
 				eliminate_lambda(ExpressionNode::make_lambda(param, subfunction))),
 			eliminate_lambda(ExpressionNode::make_lambda(param, subargument)));
 }
@@ -729,5 +742,5 @@ Value evaluate(Value context, Expression expr)
 		return evaluate(context, eliminate_lambda2(expr));
 	if (expr.is_leaf())
 		return *expr.ptr->value;
-	return apply(context, evaluate(context, expr.ptr->function), evaluate(context, expr.ptr->argument));
+	return uapply(context, evaluate(context, expr.ptr->function), evaluate(context, expr.ptr->argument));
 }
