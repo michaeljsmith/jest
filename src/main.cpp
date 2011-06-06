@@ -424,11 +424,14 @@ ASSERT(true_ == composep * detail::compose_sample1);
 //TODO: Implement properly.
 namespace detail
 {
-	Value flip2_sample0 = flip * fail;
-	Value flip2_code = codeof * flip2_sample0;
+	Value flip2_code = codeof * (flip * fail * true_);
 }
 Value consp = identical * detail::flip2_code + codeof;
 ASSERT(consp * (cons * fail * false_) == true_);
+ASSERT(consp * cons == false_);
+ASSERT(consp * identity == false_);
+ASSERT(consp * (cons * true_) == false_);
+ASSERT(consp * (cons * (cons * true_ * true_) * false_) == true_);
 
 //car
 Value car = flip * identity * true_;
