@@ -609,29 +609,36 @@ ASSERT(detail::recurse_sample1 * identity * detail::initial == detail::second);
 ASSERT(detail::fix_sample * detail::initial == detail::third);
 
 //tapply
-Value tapply  = lambda("f", lambda("x",
-			cons *
-			((car * arg("f")) * (car * arg("x"))) *
-			((cdr * arg("f")) * (cdr * arg("x")))));
+Value tapply = lambda("f", lambda("x",
+			lambda("p",
+				(cons *
+				 (car * arg("p")) *
+				 ((cdr * arg("p")) * (cdr * arg("x"))))) *
+			(cdr * arg("f") * (car * arg("x")))));
 
 //tcompose
-Value tcompose = lambda("f", lambda("g", lambda ("x",
-				tapply * arg("f") * (tapply * arg("g") * arg("x")))));
+//Value tcompose = lambda("f", lambda("g",
+//			(cons *
+//			 (compose_type * (car * arg("f")) * (car * arg("g"))) *
+//			 (compose
 
 //tflip
-Value tflip = lambda("f",
-		cons *
-		(flip * (car * arg("f"))) *
-		(flip * (cdr * arg("f"))));
+//Value tflip = lambda("f",
+//		(cons *
+//		 (flip_type * (car * arg("f"))) *
+//		 (flip * (cdr * arg("f")))));
 
 //tduplicate
-Value tduplicate = lambda("f",
-		cons *
-		(duplicate * (car * arg("f"))) *
-		(duplicate * (cdr * arg("f"))));
+//Value tduplicate = lambda("f",
+//		(cons *
+//		 (duplicate_type * (car * arg("f"))) *
+//		 (duplicate * (cdr * arg("f")))));
 
 //tconstant
-Value tconstant = constant;
+//Value tconstant = lambda("f",
+//		(cons *
+//		 (constant_type * (car * arg("f"))) *
+//		 (constant * (cdr * arg("f")))));
 
 Value sample_type = symbol("type!");
 Value sample_value = symbol("value");
