@@ -11,7 +11,7 @@ struct AssertRaiser
 	{
 		if (!condition)
 		{
-			fprintf(stderr, "%s(%d): %s\n", file, line, msg);
+			fprintf(stderr, "%s(%d): Assertion failed: %s\n", file, line, msg);
 			exit(1);
 		}
 	}
