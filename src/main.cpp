@@ -391,6 +391,11 @@ ASSERT(uflip * uidentity * ucompose * uconstant == uconstant * ucompose);
 ASSERT(ucons * ufail * ucompose * utrue == ufail);
 ASSERT(ucons * ufail * ucompose * ufalse == ucompose);
 
+//unot
+Value unot = ucons * ufalse * utrue;
+ASSERT(unot * ufalse == utrue);
+ASSERT(unot * utrue == ufalse);
+
 //uidentical
 Value code_identical1(Value /*context*/, void* data, Value argument)
 {
@@ -636,33 +641,80 @@ ASSERT(uconditional * ufalse * ucons * ufalse * uflip * udefault * uconstant == 
 ASSERT(uconditional * utrue * ucons * ufalse * uflip * udefault * uconstant == ucons);
 
 //uTag
+Value uTag = usymbol("uTag");
+
 //uis
+Value uis = uidentity;
+
 //uMorphism
+Value uMorphism = usymbol("uMorphism");
+
 //umaps
+Value umaps = ucons;
+
 //uProduct
+Value uProduct = usymbol("uProduct");
+
 //uboth
+Value uboth = ucons;
+
 //uSum
+Value uSum = usymbol("uSum");
+
 //ueither
+Value ueither = ucons;
 
 //uSymbol
 Value uSymbol = usymbol("Symbol");
 
 //Type
-Value make_Type = ulambda("make_Type", ulambda("member",
+Value make_Type_recurse = ulambda("make_Type", ulambda("member",
 			(uconditional *
 
 			 (uidentical * usymbol("Type") * uarg("member")) *
 			 ulambda("selector",
 				 (uarg("selector") *
 				  (uarg("make_Type") * usymbol("Type")) *
-				  uSymbol)) *
+				  (ueither *
+				   (uarg("make_Type") * usymbol("Symbol")) *
+				   (uarg("make_Type") * usymbol("Sum"))))) *
+
+			 (uidentical * usymbol("Symbol") * uarg("member")) *
+			 ulambda("selector",
+				 (uarg("selector") *
+				  (uarg("make_Type") * usymbol("Type")) *
+				  (ucons * utrue * ufail))) *
+
+			 (uidentical * usymbol("Sum") * uarg("member")) *
+			 ulambda("first", ulambda("second",
+					 ulambda("selector",
+						 (uarg("selector") *
+						  (uarg("make_Type") * usymbol("Type")) *
+						  (ucons * ufalse * (ueither * uarg("first") * uarg("second"))))))) *
 
 			 udefault * ufail
 			 )));
-Value Type = ufix * make_Type * usymbol("Type");
-ASSERT(ucdr * Type == uSymbol);
-ASSERT(ucdr * (ucar * Type) == uSymbol);
-ASSERT(ucdr * (ucar * (ucar * Type)) == uSymbol);
+Value make_Type = ufix * make_Type_recurse;
+
+Value Type = make_Type * usymbol("Type");
+ASSERT(ucdr * Type == ucdr * (ucar * Type));
+ASSERT(ucdr * (ucar * (ucar * Type)) == ucdr * Type);
+
+Value Symbol = make_Type * usymbol("Symbol");
+ASSERT(ucdr * (ucar * Symbol) == ucdr * (ucar * (ucar * Symbol)));
+
+Value uEither = make_Type * usymbol("Sum");
+ASSERT(ucdr * (ucar * (uEither * Symbol * Symbol)) == ucdr * (ucar * (ucar * (uEither * Symbol * Symbol))));
+
+Value uisSymbol = ulambda("x",
+		ucar * (ucdr * uarg("x")));
+ASSERT(uisSymbol * Symbol == utrue);
+ASSERT(uisSymbol * (uEither * Symbol * Symbol) == ufalse);
+
+Value uisEither = ulambda("x",
+		unot * (ucar * (ucdr * uarg("x"))));
+ASSERT(uisEither * (uEither * Symbol * Symbol) == utrue);
+ASSERT(uisEither * Symbol == ufalse);
 
 //tapply
 Value tapply = ulambda("f", ulambda("x",
