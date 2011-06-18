@@ -718,16 +718,50 @@ ASSERT(uconditional * utrue * ucons * ufalse * uflip * udefault * uconstant == u
 Value urapply = uflip * uidentity;
 ASSERT(urapply * (ucons * utrue * ufalse) * ucdr == ufalse);
 
-//ueither
-Value ueither = ucons;
+//uswitch
+Value uswitch = ucons;
 
-//umapeither
-Value umapeither = ulambda("e", ulambda("f", ulambda("s",
+//umapswitch
+Value umapswitch = ulambda("e", ulambda("f", ulambda("s",
 				((ucar * uarg("e")) *
 				 (uarg("f") * (ucdr * uarg("e"))) *
 				 (uarg("s") * (ucdr * uarg("e")))))));
-ASSERT(umapeither * (ueither * utrue * usymbol("hello")) * ulambda("x", usymbol("first")) * ulambda("x", usymbol("second")) == usymbol("first"));
-ASSERT(umapeither * (ueither * ufalse * usymbol("chicken")) * ulambda("x", usymbol("first")) * ulambda("x", uarg("x")) == usymbol("chicken"));
+ASSERT(umapswitch * (uswitch * utrue * usymbol("hello")) * ulambda("x", usymbol("first")) * ulambda("x", usymbol("second")) == usymbol("first"));
+ASSERT(umapswitch * (uswitch * ufalse * usymbol("chicken")) * ulambda("x", usymbol("first")) * ulambda("x", uarg("x")) == usymbol("chicken"));
+
+//uvoid
+Value uvoid = ufail;
+
+//type = either
+//			either
+//				either
+//					Symbol
+//					Identity
+//				either
+//					Morphism
+//					Product
+//			either
+//				either
+//					Sum
+//					fail
+//				either
+//					fail
+//					fail
+
+//uSymbol
+Value uSymbol = (uswitch * utrue * (uswitch * utrue * (uswitch * utrue * uvoid)));
+
+//uSymbolp
+Value uSymbolp = ulambda("t",
+		(umapswitch * uarg("t") *
+		 ulambda("t0",
+			 (umapswitch * uarg("t0") *
+			  ulambda("t1",
+				  (umapswitch * uarg("t1") *
+				   (uconstant * utrue) *
+				   (uconstant * ufalse))) *
+			  (uconstant * ufalse))) *
+		 (uconstant * ufalse)));
 
 Value types = ufix * ulambda("types", ulambda("member",
 			urapply * usymbol("dummy") *
