@@ -762,6 +762,32 @@ Value uSymbolp = ulambda("t",
 				   (uconstant * ufalse))) *
 			  (uconstant * ufalse))) *
 		 (uconstant * ufalse)));
+ASSERT(uSymbolp * uSymbol == utrue);
+
+//uIdentity
+Value uIdentity = ulambda("x",
+		(uswitch * utrue * (uswitch * utrue * (uswitch * ufalse * uarg("x")))));
+ASSERT(uSymbolp * (uIdentity * usymbol("y")) == ufalse);
+
+//uIdentityp
+Value uIdentityp = ulambda("t",
+		(umapswitch * uarg("t") *
+		 ulambda("t0",
+			 (umapswitch * uarg("t0") *
+			  ulambda("t1",
+				  (umapswitch * uarg("t1") *
+				   (uconstant * ufalse) *
+				   (uconstant * utrue))) *
+			  (uconstant * ufalse))) *
+		 (uconstant * ufalse)));
+ASSERT(uIdentityp * (uIdentity * usymbol("y")) == utrue);
+ASSERT(uIdentityp * uSymbol == ufalse);
+
+//uMorphism
+Value uMorphism = ulambda("t0", ulambda("t1",
+			(uswitch * utrue * (uswitch * ufalse * (uswitch * utrue * (ucons * uarg("t0") * uarg("t0")))))));
+ASSERT(uSymbolp * (uMorphism * usymbol("y") * usymbol("z")) == ufalse);
+ASSERT(uIdentityp * (uMorphism * usymbol("y") * usymbol("z")) == ufalse);
 
 Value types = ufix * ulambda("types", ulambda("member",
 			urapply * usymbol("dummy") *
