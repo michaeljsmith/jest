@@ -1,0 +1,46 @@
++a
+-a
+++a
+a++
+--a
+a--
+!a
+~a
+*a
+&a
+
+a + b         disjunction
+a - b
+a * b         composition
+a / b         forall
+a % b         forsome
+a != b
+a > b         maps
+a < b
+a >= b
+a <= b
+a && b
+a || b
+a, b          conjunction
+a & b
+a | b
+a ^ b
+a << b
+a >> b        binding
+a->b
+a.b
+a->*b
+a.*b
+a(a1, a2)     application
+
+a = b
+a += b
+a -= b
+a *= b
+a /= b
+a %= b
+a &= b
+a |= b
+a ^= b
+a <<= b
+a >>= b
