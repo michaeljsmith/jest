@@ -45,6 +45,8 @@ Cell* make_cell(void* head, void* tail)
 	return (*pos).second;
 }
 
+ASSERT(make_cell(0, make_cell(0, 0)) == make_cell(0, make_cell(0, 0)));
+
 char* intern(char const* s)
 {
 	using namespace std;
@@ -568,16 +570,32 @@ ASSERT(ulambda("x", ucompose * uarg("x") * (uflip * uarg("x"))) * ufail == usubs
 ASSERT(ulambda("x", ulambda("y", uarg("x") * uarg("y"))) * uflip * ucompose == uflip * ucompose);
 ASSERT(ulambda("x", ulambda("y", uarg("x") * uarg("y") * (uarg("y") * uarg("x")))) * uflip * ucompose == uflip * ucompose * (ucompose * uflip));
 
-//ufix
-//(define applicative-order-y
-//  (ulambda (f)
-//    ((ulambda (x) 
-//       (f (ulambda (uarg) ((x x) uarg))))
-//     (ulambda (x) 
-//       (f (ulambda (uarg) ((x x) uarg)))))))
+//Value ufix = ulambda("f",
+//		ulambda("x", uarg("f") * ulambda("y", uarg("x") * uarg("x") * uarg("y"))) *
+//		ulambda("x", uarg("f") * ulambda("y", uarg("x") * uarg("x") * uarg("y"))));
+
 Value ufix = ulambda("f",
-		ulambda("x", uarg("f") * ulambda("y", (uarg("x") * uarg("x")) * uarg("y"))) *
-		ulambda("x", uarg("f") * ulambda("y", (uarg("x") * uarg("x")) * uarg("y"))));
+		ulambda("x", uarg("f") * ulambda("y", uarg("x") * uarg("x") * uarg("y"))) *
+		ulambda("x", uarg("f") * ulambda("y", uarg("x") * uarg("x") * uarg("y"))));
+
+//Value module = ufix * ulambda("m", ulambda("e",
+//			(uidentical * usymbol("_") * uarg("e") *
+//			 ulambda("b",
+//				 (uarg("b") * (uarg("m") * usymbol("_")) * ufail))
+//			 * uflip)));
+
+Value module = ufix * ulambda("m", uconstant * ulambda("b",
+			(uarg("b") * (uarg("m") * usymbol("_")) * ufail)));
+
+ASSERT(ucdr * (module * usymbol("_")) == ufail);
+ASSERT(module * usymbol("_") == ucar * (module * usymbol("_")));
+
+Value self = ufix * ulambda("self", ucons * uarg("self") * usymbol("hello"));
+ASSERT(ucar * self == ucar * (ucar * self));
+ASSERT(ucar * self == ucar * (ucar * (ucar * self)));
+ASSERT(ucdr * self == ucdr * (ucar * self));
+ASSERT(ucdr * self == ucdr * (ucar * (ucar * self)));
+ASSERT(self == ucar * self);
 
 namespace detail
 {
