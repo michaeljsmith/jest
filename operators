@@ -1,39 +1,52 @@
+a++
+a--
+a(a1, a2)     application
+
+++a
+--a
 +a
 -a
-++a
-a++
---a
-a--
 !a
 ~a
 *a
 &a
 
-a + b         disjunction
-a - b
+a->*b
+a.*b
+
 a * b         composition
-a / b         forall
-a % b         forsome
-a != b
+a / b
+a % b
+
+a + b
+a - b
+
+a << b
+a >> b
+
 a > b         maps
 a < b
 a >= b
 a <= b
-a && b
-a || b
-a, b          conjunction
-a & b
-a | b
+
+a != b
+a == b
+
+a & b         conjunction
+
 a ^ b
-a << b
-a >> b        binding
+
+a | b         disjunction
+
+a && b        forall
+
+a || b        forsome
+
+a, b
 a->b
 a.b
-a->*b
-a.*b
-a(a1, a2)     application
 
-a = b
+a = b         binding
 a += b
 a -= b
 a *= b
@@ -44,3 +57,8 @@ a |= b
 a ^= b
 a <<= b
 a >>= b
+
+Copy(a=OutputStream, b=InputStream)=Write(b, Read(a))
+
+forall a (forall b (Copy ((a -> OutputStream) & (b -> InputStream)) -> Write(a & Read(b))))
+
