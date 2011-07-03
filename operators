@@ -24,7 +24,7 @@ a - b
 a << b
 a >> b
 
-a > b         maps
+a > b
 a < b
 a >= b
 a <= b
@@ -38,27 +38,22 @@ a ^ b
 
 a | b         disjunction
 
-a && b        forall
+a && b
 
-a || b        forsome
+a || b
 
 a, b
 a->b
 a.b
 
-a = b         binding
+a = b         mapping
 a += b
 a -= b
 a *= b
 a /= b
 a %= b
-a &= b
-a |= b
+a &= b        forall
+a |= b        forsome
 a ^= b
 a <<= b
 a >>= b
-
-Copy(a=OutputStream, b=InputStream)=Write(b, Read(a))
-
-forall a (forall b (Copy ((a -> OutputStream) & (b -> InputStream)) -> Write(a & Read(b))))
-
