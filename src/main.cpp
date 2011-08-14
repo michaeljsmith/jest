@@ -61,9 +61,11 @@ namespace jest {
       return (char*)(*pos).c_str();
     }
 
+    char* tag_error = intern("error");
     char* tag_models = intern("models");
     char* tag_symbol = intern("symbol");
     char* tag_predicate = intern("predicate");
+    char* tag_conjunction = intern("conjunction");
     char* tag_binding = intern("binding");
     char* tag_rule = intern("rule");
     char* tag_nothing = intern("nothing");
@@ -108,21 +110,80 @@ namespace jest {
 
       explicit Value(Cell* cell): cell(cell) {}
       Value(Expression const& expression);
+
+      bool operator==(Value const& other) const {
+        return cell == other.cell;
+      }
+
+      operator bool() const;
     };
 
     Value evaluate(Value const& environment, Value const& expression);
     std::string value_to_string_recurse(Value expression);
 
+    Value nil(make_cell(tag_symbol, intern("nil")));
+    Value fail(make_cell(tag_symbol, intern("fail")));
+
+    bool is_nil(Value const& value) {
+      return value == nil;
+    }
+
+    Value car(Value pair) {
+      return Value(static_cast<Cell*>(pair.cell->head));
+    }
+
+    Value cdr(Value pair) {
+      return Value(static_cast<Cell*>(pair.cell->tail));
+    }
+
+    int length_recurse(int accumulator, Value const& value) {
+      if (is_nil(value)) {
+        return accumulator;
+      } else {
+        return length_recurse(accumulator + 1, car(value));
+      }
+    }
+
+    int length(Value const& value) {
+      return length_recurse(0, value);
+    }
+
+    Value::operator bool() const {
+      ASSERT(cell != fail.cell);
+      return cell != nil.cell;
+    }
+
+    Value cons(Value x0, Value x1) {
+      return Value(make_cell(x0.cell, x1.cell));
+    }
+
     Value Nothing(make_cell(tag_nothing, 0));
+
     Value builtin_environment = Nothing;
 
     Value::Value(Expression const& expression) {
-      printf("%s\n", value_to_string_recurse(Value(expression.cell)).c_str());
       *this = evaluate(builtin_environment, Value(expression.cell));
     }
 
     char* tagof(Value x) {
       return (char*)x.cell->head;
+    }
+
+    bool is_error(Value expression) {
+      return tagof(expression) == tag_error;
+    }
+
+    Value make_error(char const* message) {
+      return Value(make_cell(tag_error, make_cell(tag_symbol, intern(message))));
+    }
+
+    char* error_message(Value error) {
+      ASSERT(is_error(error));
+      return static_cast<char*>(static_cast<Cell*>(error.cell->tail)->tail);
+    }
+
+    bool is_nothing(Value const& expression) {
+      return tag_nothing == tagof(expression);
     }
 
     bool is_symbol(Value expression) {
@@ -134,6 +195,10 @@ namespace jest {
     }
 
     Value make_pair(Value x0, Value x1) {
+      if (is_error(x0))
+        return x0;
+      if (is_error(x1))
+        return x1;
       return Value(make_cell(tag_pair, make_cell(x0.cell, x1.cell)));
     }
 
@@ -153,6 +218,10 @@ namespace jest {
 
     Value make_binding(Value symbol, Value expression) {
       ASSERT(is_symbol(symbol));
+      if (is_error(symbol))
+        return symbol;
+      if (is_error(expression))
+        return expression;
       return Value(make_cell(tag_binding, make_cell(symbol.cell, expression.cell)));
     }
 
@@ -171,6 +240,11 @@ namespace jest {
     }
 
     Value make_rule(Value pattern, Value expression) {
+      ASSERT(!is_symbol(pattern));
+      if (is_error(pattern))
+        return pattern;
+      if (is_error(expression))
+        return expression;
       return Value(make_cell(tag_rule, make_cell(pattern.cell, expression.cell)));
     }
 
@@ -189,6 +263,10 @@ namespace jest {
     }
 
     Value make_models(Value model, Value concept) {
+      if (is_error(model))
+        return model;
+      if (is_error(concept))
+        return concept;
       return Value(make_cell(tag_models, make_cell(model.cell, concept.cell)));
     }
 
@@ -202,12 +280,15 @@ namespace jest {
       return Value(static_cast<Cell*>(static_cast<Cell*>(models.cell->tail)->tail));
     }
 
-
     bool is_predicate(Value expression) {
       return tagof(expression) == tag_predicate;
     }
 
     Value make_predicate(Value operator_, Value operand) {
+      if (is_error(operator_))
+        return operator_;
+      if (is_error(operand))
+        return operand;
       return Value(make_cell(tag_predicate, make_cell(operator_.cell, operand.cell)));
     }
 
@@ -219,6 +300,28 @@ namespace jest {
     Value predicate_operand(Value const& predicate) {
       ASSERT(is_predicate(predicate));
       return Value(static_cast<Cell*>(static_cast<Cell*>(predicate.cell->tail)->tail));
+    }
+
+    bool is_conjunction(Value expression) {
+      return tagof(expression) == tag_conjunction;
+    }
+
+    Value make_conjunction(Value x0, Value x1) {
+      if (is_error(x0))
+        return x0;
+      if (is_error(x1))
+        return x1;
+      return Value(make_cell(tag_conjunction, make_cell(x0.cell, x1.cell)));
+    }
+
+    Value conjunction_first(Value const& conjunction) {
+      ASSERT(is_conjunction(conjunction));
+      return Value(static_cast<Cell*>(static_cast<Cell*>(conjunction.cell->tail)->head));
+    }
+
+    Value conjunction_second(Value const& conjunction) {
+      ASSERT(is_conjunction(conjunction));
+      return Value(static_cast<Cell*>(static_cast<Cell*>(conjunction.cell->tail)->tail));
     }
 
     std::string value_to_string_recurse(Value expression) {
@@ -242,30 +345,119 @@ namespace jest {
         return value_to_string_recurse(rule_pattern(expression)) + " = " +
           value_to_string_recurse(rule_expression(expression));
       } else if (tag_nothing == tagof(expression)) {
-        ASSERT(0);
-        return "";
+        return "Nothing";
+      } else if (tag_error == tagof(expression)) {
+        return string("Error(") + error_message(expression) + ")";
       } else {
         ASSERT(0);
         return "";
       }
     }
 
+    Value compute_bindings_recurse(Value const& /*pattern*/, Value const& /*expression*/) {
+      ASSERT(0);
+      return nil;
+    }
+
+    Value compute_candidate(Value const& rule, Value const& expression) {
+      ASSERT(is_rule(rule));
+      Value bindings = compute_bindings_recurse(rule_pattern(rule), expression);
+      if (bindings == fail) {
+        return nil;
+      } else {
+        return cons(bindings, expression);
+      }
+    }
+
+    Value get_predicate_candidate_list_recurse(Value candidate_list, Value const& environment, Value const& expression) {
+      if (is_conjunction(environment)) {
+        candidate_list = get_predicate_candidate_list_recurse(candidate_list, conjunction_first(environment), expression);
+        return get_predicate_candidate_list_recurse(candidate_list, conjunction_second(environment), expression);
+      } else if (is_rule(environment)) {
+        if (Value candidate = compute_candidate(environment, expression)) {
+          candidate_list = cons(candidate, candidate_list);
+        }
+        return candidate_list;
+      } else if (is_nothing(environment)) {
+        return candidate_list;
+      } else {
+        ASSERT(0);
+        return candidate_list;
+      }
+    }
+
+    Value get_predicate_candidate_list(Value const& environment, Value const& expression) {
+      return get_predicate_candidate_list_recurse(nil, environment, expression);
+    }
+
+    Value evaluate_predicate_function(Value const& environment, Value const& bindings, Value const& expression) {
+      Value subenvironment = make_conjunction(bindings, environment);
+      return evaluate(subenvironment, expression);
+    }
+
     Value evaluate_predicate(Value const& environment, Value const& expression) {
+      Value candidate_list = get_predicate_candidate_list(environment, expression);
+
+      if (is_nil(candidate_list)) {
+        return make_error("No matching function for predicate.");
+      } else if (length(candidate_list) > 1) {
+        return make_error("Ambiguous predicate.");
+      } else {
+        Value candidate = car(candidate_list);
+        Value bindings = car(candidate);
+        Value rule_expression = cdr(candidate);
+        return evaluate_predicate_function(environment, bindings, rule_expression);
+      }
+    }
+
+    Value get_symbol_binding_list_recurse(Value binding_list, Value const& environment, Value const& symbol) {
+      if (is_conjunction(environment)) {
+        binding_list = get_symbol_binding_list_recurse(binding_list, conjunction_first(environment), symbol);
+        return get_symbol_binding_list_recurse(binding_list, conjunction_second(environment), symbol);
+      } else if (is_binding(environment)) {
+        if (binding_symbol(environment) == symbol)
+          return cons(binding_expression(environment), binding_list);
+        return binding_list;
+      } else if (is_nothing(environment)) {
+        return binding_list;
+      } else {
+        ASSERT(0);
+        return binding_list;
+      }
+    }
+
+    Value get_symbol_binding_list(Value const& environment, Value const& symbol) {
+      return get_symbol_binding_list_recurse(nil, environment, symbol);
+    }
+
+    Value evaluate_symbol(Value const& environment, Value const& symbol) {
+      Value binding_list = get_symbol_binding_list(environment, symbol);
+
+      if (is_nil(binding_list)) {
+        return make_error("Undefined symbol.");
+      } else if (length(binding_list) > 1) {
+        return make_error("Multiply defined symbol.");
+      } else {
+        return evaluate(environment, car(binding_list));
+      }
     }
 
     Value evaluate(Value const& environment, Value const& expression) {
       if (tag_predicate == tagof(expression)) {
         return evaluate_predicate(environment, expression);
+      } else if (tag_conjunction == tagof(expression)) {
+        ASSERT(0);
+        return Value(0);
       } else if (tag_pair == tagof(expression)) {
         return make_pair(
-          evaluate(environment, pair_first(expression)),
-          evaluate(environment, pair_second(expression)));
+            evaluate(environment, pair_first(expression)),
+            evaluate(environment, pair_second(expression)));
       } else if (tag_models == tagof(expression)) {
-        ASSERT(0);
-        return Value(0);
+        return make_models(
+            evaluate(environment, models_model(expression)),
+            evaluate(environment, models_concept(expression)));
       } else if (tag_symbol == tagof(expression)) {
-        ASSERT(0);
-        return Value(0);
+        return evaluate_symbol(environment, expression);
       } else if (tag_binding == tagof(expression)) {
         return make_binding(
             binding_symbol(expression),
@@ -293,6 +485,8 @@ namespace jest {
   using detail::symbol;
 
   jest::Expression _ = jest::symbol("_");
+
+  using detail::value_to_string_recurse;
 }
 
 #define JEST_DEFINE(x) jest::Expression x = jest::symbol(#x)
@@ -338,6 +532,8 @@ namespace testmodule {
 
 int main() {
   using namespace jest;
+
+  printf("%s\n", value_to_string_recurse(testmodule::module).c_str());
 
   return 0;
 }
