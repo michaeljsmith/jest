@@ -65,8 +65,9 @@ namespace jest {
     char* tag_symbol = intern("symbol");
     char* tag_predicate = intern("predicate");
     char* tag_binding = intern("binding");
+    char* tag_rule = intern("rule");
     char* tag_nothing = intern("nothing");
-    char* tag_sequence = intern("sequence");
+    char* tag_pair = intern("pair");
 
     struct Expression {
       Cell* cell;
@@ -74,16 +75,19 @@ namespace jest {
       explicit Expression(Cell* cell): cell(cell) {}
 
       Expression& operator=(Expression const& other) {
-        this->cell = make_cell(tag_binding, make_cell(this->cell, make_cell(other.cell, 0)));
+        if (this->cell->head == tag_symbol)
+          this->cell = make_cell(tag_binding, make_cell(this->cell, other.cell));
+        else
+          this->cell = make_cell(tag_rule, make_cell(this->cell, other.cell));
         return *this;
       }
 
       Expression operator()(Expression const& x0) {
-        return Expression(make_cell(tag_predicate, make_cell(this->cell, make_cell(x0.cell, 0))));
+        return Expression(make_cell(tag_predicate, make_cell(this->cell, x0.cell)));
       }
 
       Expression operator()(Expression const& x0, Expression const& x1) {
-        return Expression(make_cell(tag_predicate, make_cell(this->cell, make_cell(x0.cell, make_cell(x1.cell, 0)))));
+        return Expression(make_cell(tag_predicate, make_cell(this->cell, make_cell(tag_pair, make_cell(x0.cell, x1.cell)))));
       }
 
       Expression operator^=(Expression const& r) {
@@ -92,6 +96,7 @@ namespace jest {
     };
 
     Expression operator,(Expression const& l, Expression const& r) {
+      return Expression(make_cell(tag_pair, make_cell(l.cell, r.cell)));
     }
 
     Expression symbol(char const* s) {
@@ -106,11 +111,13 @@ namespace jest {
     };
 
     Value evaluate(Value const& environment, Value const& expression);
+    std::string value_to_string_recurse(Value expression);
 
     Value Nothing(make_cell(tag_nothing, 0));
     Value builtin_environment = Nothing;
 
     Value::Value(Expression const& expression) {
+      printf("%s\n", value_to_string_recurse(Value(expression.cell)).c_str());
       *this = evaluate(builtin_environment, Value(expression.cell));
     }
 
@@ -118,11 +125,166 @@ namespace jest {
       return (char*)x.cell->head;
     }
 
-    Value evaluate(Value const& environment, Value const& expression) {
-      if (tagof(expression) == tag_predicate) {
+    bool is_symbol(Value expression) {
+      return tagof(expression) == tag_symbol;
+    }
+
+    bool is_pair(Value expression) {
+      return tagof(expression) == tag_pair;
+    }
+
+    Value make_pair(Value x0, Value x1) {
+      return Value(make_cell(tag_pair, make_cell(x0.cell, x1.cell)));
+    }
+
+    Value pair_first(Value const& pair) {
+      ASSERT(is_pair(pair));
+      return Value(static_cast<Cell*>(static_cast<Cell*>(pair.cell->tail)->head));
+    }
+
+    Value pair_second(Value const& pair) {
+      ASSERT(is_pair(pair));
+      return Value(static_cast<Cell*>(static_cast<Cell*>(pair.cell->tail)->tail));
+    }
+
+    bool is_binding(Value expression) {
+      return tagof(expression) == tag_binding;
+    }
+
+    Value make_binding(Value symbol, Value expression) {
+      ASSERT(is_symbol(symbol));
+      return Value(make_cell(tag_binding, make_cell(symbol.cell, expression.cell)));
+    }
+
+    Value binding_symbol(Value const& binding) {
+      ASSERT(is_binding(binding));
+      return Value(static_cast<Cell*>(static_cast<Cell*>(binding.cell->tail)->head));
+    }
+
+    Value binding_expression(Value const& binding) {
+      ASSERT(is_binding(binding));
+      return Value(static_cast<Cell*>(static_cast<Cell*>(binding.cell->tail)->tail));
+    }
+
+    bool is_rule(Value expression) {
+      return tagof(expression) == tag_rule;
+    }
+
+    Value make_rule(Value pattern, Value expression) {
+      return Value(make_cell(tag_rule, make_cell(pattern.cell, expression.cell)));
+    }
+
+    Value rule_pattern(Value const& rule) {
+      ASSERT(is_rule(rule));
+      return Value(static_cast<Cell*>(static_cast<Cell*>(rule.cell->tail)->head));
+    }
+
+    Value rule_expression(Value const& rule) {
+      ASSERT(is_rule(rule));
+      return Value(static_cast<Cell*>(static_cast<Cell*>(rule.cell->tail)->tail));
+    }
+
+    bool is_models(Value expression) {
+      return tagof(expression) == tag_models;
+    }
+
+    Value make_models(Value model, Value concept) {
+      return Value(make_cell(tag_models, make_cell(model.cell, concept.cell)));
+    }
+
+    Value models_model(Value const& models) {
+      ASSERT(is_models(models));
+      return Value(static_cast<Cell*>(static_cast<Cell*>(models.cell->tail)->head));
+    }
+
+    Value models_concept(Value const& models) {
+      ASSERT(is_models(models));
+      return Value(static_cast<Cell*>(static_cast<Cell*>(models.cell->tail)->tail));
+    }
+
+
+    bool is_predicate(Value expression) {
+      return tagof(expression) == tag_predicate;
+    }
+
+    Value make_predicate(Value operator_, Value operand) {
+      return Value(make_cell(tag_predicate, make_cell(operator_.cell, operand.cell)));
+    }
+
+    Value predicate_operator(Value const& predicate) {
+      ASSERT(is_predicate(predicate));
+      return Value(static_cast<Cell*>(static_cast<Cell*>(predicate.cell->tail)->head));
+    }
+
+    Value predicate_operand(Value const& predicate) {
+      ASSERT(is_predicate(predicate));
+      return Value(static_cast<Cell*>(static_cast<Cell*>(predicate.cell->tail)->tail));
+    }
+
+    std::string value_to_string_recurse(Value expression) {
+      using namespace std;
+
+      if (tag_predicate == tagof(expression)) {
+        return value_to_string_recurse(predicate_operator(expression)) +
+          "(" + value_to_string_recurse(predicate_operand(expression)) + ")";
+      } else if (tag_pair == tagof(expression)) {
+        return value_to_string_recurse(pair_first(expression)) + ", " +
+          value_to_string_recurse(pair_second(expression));
+      } else if (tag_models == tagof(expression)) {
+        return value_to_string_recurse(models_model(expression)) + " ^= " +
+          value_to_string_recurse(models_concept(expression));
+      } else if (tag_symbol == tagof(expression)) {
+        return static_cast<char*>(expression.cell->tail);
+      } else if (tag_binding == tagof(expression)) {
+        return value_to_string_recurse(binding_symbol(expression)) + " = " +
+          value_to_string_recurse(binding_expression(expression));
+      } else if (tag_rule == tagof(expression)) {
+        return value_to_string_recurse(rule_pattern(expression)) + " = " +
+          value_to_string_recurse(rule_expression(expression));
+      } else if (tag_nothing == tagof(expression)) {
         ASSERT(0);
+        return "";
+      } else {
+        ASSERT(0);
+        return "";
       }
-      ASSERT(0);
+    }
+
+    Value evaluate_predicate(Value const& environment, Value const& expression) {
+    }
+
+    Value evaluate(Value const& environment, Value const& expression) {
+      if (tag_predicate == tagof(expression)) {
+        return evaluate_predicate(environment, expression);
+      } else if (tag_pair == tagof(expression)) {
+        return make_pair(
+          evaluate(environment, pair_first(expression)),
+          evaluate(environment, pair_second(expression)));
+      } else if (tag_models == tagof(expression)) {
+        ASSERT(0);
+        return Value(0);
+      } else if (tag_symbol == tagof(expression)) {
+        ASSERT(0);
+        return Value(0);
+      } else if (tag_binding == tagof(expression)) {
+        return make_binding(
+            binding_symbol(expression),
+            evaluate(environment, binding_expression(expression)));
+        ASSERT(0);
+        return Value(0);
+      } else if (tag_rule == tagof(expression)) {
+        return make_rule(
+            evaluate(environment, rule_pattern(expression)),
+            evaluate(environment, rule_expression(expression)));
+        ASSERT(0);
+        return Value(0);
+      } else if (tag_nothing == tagof(expression)) {
+        ASSERT(0);
+        return Value(0);
+      } else {
+        ASSERT(0);
+        return Value(0);
+      }
     }
   }
 
