@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <map>
 #include <set>
 #include <string>
@@ -177,6 +178,15 @@ namespace jest {
       return Value(make_cell(tag_error, make_cell(tag_symbol, intern(message))));
     }
 
+    Value make_error_format(char const* message, ...) {
+      va_list args;
+      va_start(args, message);
+      char buf[1024];
+      vsprintf(buf, message, args);
+      va_end(args);
+      return make_error(buf);
+    }
+
     char* error_message(Value error) {
       ASSERT(is_error(error));
       return static_cast<char*>(static_cast<Cell*>(error.cell->tail)->tail);
@@ -188,6 +198,11 @@ namespace jest {
 
     bool is_symbol(Value expression) {
       return tagof(expression) == tag_symbol;
+    }
+
+    char* symbol_text(Value symbol) {
+      ASSERT(is_symbol(symbol));
+      return static_cast<char*>(symbol.cell->tail);
     }
 
     bool is_pair(Value expression) {
@@ -399,9 +414,11 @@ namespace jest {
       Value candidate_list = get_predicate_candidate_list(environment, expression);
 
       if (is_nil(candidate_list)) {
-        return make_error("No matching function for predicate.");
+        return make_error_format("No matching function for predicate \"%s\".",
+            value_to_string_recurse(expression).c_str());
       } else if (length(candidate_list) > 1) {
-        return make_error("Ambiguous predicate.");
+        return make_error_format("Ambiguous predicate \"%s\".",
+            value_to_string_recurse(expression).c_str());
       } else {
         Value candidate = car(candidate_list);
         Value bindings = car(candidate);
@@ -434,11 +451,43 @@ namespace jest {
       Value binding_list = get_symbol_binding_list(environment, symbol);
 
       if (is_nil(binding_list)) {
-        return make_error("Undefined symbol.");
+        return make_error_format("Undefined symbol \"%s\".", symbol_text(symbol));
       } else if (length(binding_list) > 1) {
-        return make_error("Multiply defined symbol.");
+        return make_error_format("Multiply defined symbol \"%s\".", symbol_text(symbol));
       } else {
         return evaluate(environment, car(binding_list));
+      }
+    }
+
+    Value evaluate_pattern(Value const& environment, Value const& expression) {
+      if (tag_predicate == tagof(expression)) {
+        return make_predicate(
+            evaluate_pattern(environment, predicate_operator(expression)),
+            evaluate_pattern(environment, predicate_operand(expression)));
+      } else if (tag_conjunction == tagof(expression)) {
+        ASSERT(0);
+        return Value(0);
+      } else if (tag_pair == tagof(expression)) {
+        ASSERT(0);
+        return Value(0);
+      } else if (tag_models == tagof(expression)) {
+        return make_models(
+            evaluate_pattern(environment, models_model(expression)),
+            evaluate_pattern(environment, models_concept(expression)));
+      } else if (tag_symbol == tagof(expression)) {
+        return evaluate_symbol(environment, expression);
+      } else if (tag_binding == tagof(expression)) {
+        ASSERT(0);
+        return Value(0);
+      } else if (tag_rule == tagof(expression)) {
+        ASSERT(0);
+        return Value(0);
+      } else if (tag_nothing == tagof(expression)) {
+        ASSERT(0);
+        return Value(0);
+      } else {
+        ASSERT(0);
+        return Value(0);
       }
     }
 
@@ -449,12 +498,15 @@ namespace jest {
         ASSERT(0);
         return Value(0);
       } else if (tag_pair == tagof(expression)) {
+        Value result0 = evaluate(environment, pair_first(expression));
+        if (is_error(result0))
+          return result0;
+        Value new_environment = make_conjunction(result0, environment);
         return make_pair(
-            evaluate(environment, pair_first(expression)),
-            evaluate(environment, pair_second(expression)));
+            result0, evaluate(new_environment, pair_second(expression)));
       } else if (tag_models == tagof(expression)) {
         return make_models(
-            evaluate(environment, models_model(expression)),
+            evaluate_pattern(environment, models_model(expression)),
             evaluate(environment, models_concept(expression)));
       } else if (tag_symbol == tagof(expression)) {
         return evaluate_symbol(environment, expression);
@@ -466,7 +518,7 @@ namespace jest {
         return Value(0);
       } else if (tag_rule == tagof(expression)) {
         return make_rule(
-            evaluate(environment, rule_pattern(expression)),
+            evaluate_pattern(environment, rule_pattern(expression)),
             evaluate(environment, rule_expression(expression)));
         ASSERT(0);
         return Value(0);
@@ -485,6 +537,7 @@ namespace jest {
   using detail::symbol;
 
   jest::Expression _ = jest::symbol("_");
+  jest::Expression op = jest::symbol("op");
 
   using detail::value_to_string_recurse;
 }
@@ -512,6 +565,8 @@ namespace testmodule {
     using namespace jest;
 
     Value module = (
+
+      _length = op(),
 
       Data = _length(data ^= _) ^= NonnegativeInteger,
       OutputStream = _write(stream ^= _, data ^= Data) ^= Void,
