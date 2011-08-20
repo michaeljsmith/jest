@@ -169,9 +169,27 @@ namespace evaluation {
       return nothingp(value) || consp(value);
     }
 
+    char const* text(Value const& symbol) {
+      ASSERT(symbolp(symbol));
+      return static_cast<char const*>(symbol.cell->tail);
+    }
+
     Value tag_quote = symbol("quote");
     Value quotation(Value const& expression) {
       return list(tag_quote, expression);
+    }
+
+    bool quotationp(Value const& value) {
+      bool result = consp(value) && car(value) == tag_quote;
+      if (result) {
+        ASSERT(nothingp(cddr(value)));
+      }
+      return result;
+    }
+
+    Value quotation_value(Value const& quotation) {
+      ASSERT(quotationp(quotation));
+      return cadr(quotation);
     }
 
     Value tag_binding = symbol("binding");
@@ -259,7 +277,11 @@ namespace evaluation {
 
     Value lookup_symbol(Value environment, Value symbol) {
       Value result = lookup_symbol_recurse(environment, symbol);
-      return failp(result) ? error : result;
+      if (result == fail) {
+        return error;
+      } else {
+        return evaluate(environment, result);
+      }
     }
 
     Value evaluate_binding(Value environment, Value expression) {
@@ -270,30 +292,31 @@ namespace evaluation {
       // Bind the symbol to itself, to allow definitions to be effectively
       // quoted.
       Value self_binding = binding(symbol, quotation(symbol));
-      ASSERT(nothingp(environment));
       Value new_environment = conjunction(self_binding, environment);
 
       Value value = evaluate(new_environment, binding_value(expression));
       if (errorp(value)) {
-        ASSERT(errorp(value));
         return value;
       }
       ASSERT(!failp(value));
-      return binding(symbol, value);
+      return binding(symbol, quotation(value));
     }
 
     Value evaluate(Value environment, Value expression) {
-      if (sequencep(expression)) {
+      if (quotationp(expression)) {
+        return quotation_value(expression);
+      } else if (sequencep(expression)) {
         ASSERT(consp(expression));
         ASSERT(!bindingp(sequence_second(expression)));
         Value result0 = evaluate(environment, sequence_first(expression));
         if (errorp(result0)) {
           return result0;
         }
-        ASSERT(bindingp(result0));
-        ASSERT(nothingp(environment));
         Value new_environment = conjunction(environment, result0);
-        return evaluate(new_environment, sequence_second(expression));
+        ASSERT(symbolp(sequence_second(expression)));
+        Value result = evaluate(new_environment, sequence_second(expression));
+        ASSERT(symbolp(result));
+        return result;
       } else if (symbolp(expression)) {
         return lookup_symbol(environment, expression);
       } else if (bindingp(expression)) {
@@ -305,7 +328,6 @@ namespace evaluation {
     }
 
     Expression operator,(Expression const& x0, Expression const& x1) {
-      ASSERT(x0.cell != x1.cell);
       Expression expression;
       expression.cell = make_cell(tag_cons, make_cell(
             tag_sequence.cell, make_cell(tag_cons, make_cell(
@@ -360,6 +382,7 @@ ASSERT(sequence_first(evaluation::quote((Foo, Bar))) == evaluation::quote(Foo));
 ASSERT(sequence_first(evaluation::quote((Foo, Bar))) != evaluation::quote(Bar));
 ASSERT(sequence_second(evaluation::quote((Foo, Bar))) == evaluation::quote(Bar));
 ASSERT((Foo = Foo, Foo) != values::error);
+ASSERT((Foo = Foo, Foo) == evaluation::quote(Foo));
 
 int main() {
   return 0;
