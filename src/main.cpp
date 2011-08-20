@@ -234,15 +234,33 @@ namespace evaluation {
       return caddr(sequence);
     }
 
+    Value tag_conjunction = symbol("conjunction");
     Value conjunction(Value const& x0, Value const& x1) {
       if (nothingp(x0)) {
         return x1;
       } else if (nothingp(x1)) {
         return x0;
       } else {
-        ASSERT(0);
-        return nothing;
+        return list(tag_conjunction, x0, x1);
       }
+    }
+
+    bool conjunctionp(Value const& value) {
+      bool result = consp(value) && car(value) == tag_conjunction;
+      if (result) {
+        ASSERT(nothingp(cdddr(value)));
+      }
+      return result;
+    }
+
+    Value conjunction_first(Value const& conjunction) {
+      ASSERT(conjunctionp(conjunction));
+      return cadr(conjunction);
+    }
+
+    Value conjunction_second(Value const& conjunction) {
+      ASSERT(conjunctionp(conjunction));
+      return caddr(conjunction);
     }
 
     Value evaluate(Value environment, Value expression);
@@ -264,14 +282,27 @@ namespace evaluation {
         if (binding_symbol(environment) == symbol) {
           return binding_value(environment);
         } else {
-          ASSERT(0);
           return fail;
         }
       } else if (nothingp(environment)) {
         return fail;
+      } else if (conjunctionp(environment)) {
+        Value result0 = lookup_symbol_recurse(
+            conjunction_first(environment), symbol);
+        Value result1 = lookup_symbol_recurse(
+            conjunction_second(environment), symbol);
+        if (result0 == fail && result1 == fail) {
+          return fail;
+        } else if (result0 != fail && result1 != fail) {
+          return error;
+        } else if (result0 != fail) {
+          return result0;
+        } else {
+          return result1;
+        }
       } else {
         ASSERT(0);
-        return nothing;
+        return fail;
       }
     }
 
@@ -307,15 +338,12 @@ namespace evaluation {
         return quotation_value(expression);
       } else if (sequencep(expression)) {
         ASSERT(consp(expression));
-        ASSERT(!bindingp(sequence_second(expression)));
         Value result0 = evaluate(environment, sequence_first(expression));
         if (errorp(result0)) {
           return result0;
         }
         Value new_environment = conjunction(environment, result0);
-        ASSERT(symbolp(sequence_second(expression)));
         Value result = evaluate(new_environment, sequence_second(expression));
-        ASSERT(symbolp(result));
         return result;
       } else if (symbolp(expression)) {
         return lookup_symbol(environment, expression);
@@ -383,6 +411,7 @@ ASSERT(sequence_first(evaluation::quote((Foo, Bar))) != evaluation::quote(Bar));
 ASSERT(sequence_second(evaluation::quote((Foo, Bar))) == evaluation::quote(Bar));
 ASSERT((Foo = Foo, Foo) != values::error);
 ASSERT((Foo = Foo, Foo) == evaluation::quote(Foo));
+ASSERT((Foo = Foo, Bar = Foo, Bar) == evaluation::quote(Foo));
 
 int main() {
   return 0;
