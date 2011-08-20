@@ -93,7 +93,7 @@ namespace jest {
         return Expression(make_cell(tag_predicate, make_cell(this->cell, make_cell(tag_pair, make_cell(x0.cell, x1.cell)))));
       }
 
-      Expression operator^=(Expression const& r) {
+      Expression operator^(Expression const& r) {
         return Expression(make_cell(tag_models, make_cell(this->cell, r.cell)));
       }
     };
@@ -538,6 +538,7 @@ namespace jest {
 
   jest::Expression _ = jest::symbol("_");
   jest::Expression op = jest::symbol("op");
+  jest::Expression Nothing = jest::symbol("Nothing");
 
   using detail::value_to_string_recurse;
 }
@@ -566,19 +567,20 @@ namespace testmodule {
 
     Value module = (
 
-      _length = op(),
+      Data = Void,
 
-      Data = _length(data ^= _) ^= NonnegativeInteger,
-      OutputStream = _write(stream ^= _, data ^= Data) ^= Void,
-      InputStream = _read(stream ^= _) ^= Data,
+      OutputStream = _write(stream ^ _, data ^ Data) ^ Void,
+      InputStream = _read(stream ^ _) ^ Data,
 
-      write(output ^= OutputStream, data ^= Data) =
+      _write(output ^ OutputStream, data ^ Data) ^ Void,
+      write(output ^ OutputStream, data ^ Data) ^ Void =
         _write(output, data),
 
-      read(input ^= InputStream) =
+      _read(input ^ InputStream) ^ Data,
+      read(input ^ InputStream) ^ Data =
         _read(input),
 
-      copy(output ^= OutputStream, input ^= InputStream) =
+      copy(output ^ OutputStream, input ^ InputStream) ^ Void =
         write(output, read(input)));
   }
 
