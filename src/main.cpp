@@ -66,6 +66,7 @@ namespace evaluation {
     struct Expression {
       Expression operator=(Expression const& other);
       Expression operator()(Expression const& other);
+      Expression operator()(Expression const& x0, Expression const& x1);
 
       Cell* cell;
     };
@@ -453,6 +454,8 @@ namespace evaluation {
         } else {
           return result1;
         }
+      } else if (typingp(environment)) {
+        return fail;
       } else {
         ASSERT(0);
         return fail;
@@ -511,6 +514,10 @@ namespace evaluation {
       if (pattern_type == value_type) {
         return arguments;
       } else {
+        ASSERT(symbolp(pattern_type));
+        ASSERT(symbolp(value_type));
+        fprintf(stderr, "%s\n", text(pattern_type));
+        fprintf(stderr, "%s\n", text(value_type));
         ASSERT(0);
         return fail;
       }
@@ -535,8 +542,28 @@ namespace evaluation {
 
       Value symbol = typing_pattern(pattern);
       ASSERT(symbolp(symbol));
-      Value new_binding = cons(symbol, typing_pattern(value));
+      Value new_binding = cons(symbol,
+          typing(typing_type(pattern), typing_type(value)));
       return cons(new_binding, arguments);
+    }
+
+    Value match_pattern_sequence_recurse(Value arguments,
+        Value const& pattern, Value const& value) {
+      ASSERT(sequencep(pattern));
+
+      if (!sequencep(value)) {
+        return fail;
+      }
+
+      arguments = match_pattern_recurse(
+          arguments, sequence_first(pattern), sequence_first(value));
+      if (failp(arguments) || errorp(arguments)) {
+        return arguments;
+      }
+
+      arguments = match_pattern_recurse(
+          arguments, sequence_second(pattern), sequence_second(value));
+      return arguments;
     }
 
     Value match_pattern_recurse(Value const& arguments,
@@ -549,8 +576,7 @@ namespace evaluation {
         ASSERT(0);
         return nothing;
       } else if (sequencep(pattern)) {
-        ASSERT(0);
-        return nothing;
+        return match_pattern_sequence_recurse(arguments, pattern, value);
       } else {
         ASSERT(0);
         return nothing;
@@ -570,7 +596,6 @@ namespace evaluation {
       Value type = typing_type(pattern);
       ASSERT(predicatep(predicate_pattern));
       if (predicate_operator(predicate_pattern) != predicate_operator(predicate)) {
-        ASSERT(0);
         return fail;
       }
 
@@ -654,12 +679,11 @@ namespace evaluation {
     Value evaluate_predicate(
         Value const& environment, Value const& value) {
       ASSERT(predicatep(value));
-      ASSERT(symbolp(predicate_argument(value)));
-      ASSERT(predicate_argument(value) == symbol("baz"));
       Value argument_evaluated_predicate = predicate(
           predicate_operator(value),
           evaluate(environment, predicate_argument(value)));
       if (errorp(argument_evaluated_predicate)) {
+        ASSERT(0);
         return argument_evaluated_predicate;
       }
       ASSERT(predicatep(argument_evaluated_predicate));
@@ -810,6 +834,16 @@ namespace evaluation {
       return predicate;
     }
 
+    Expression Expression::operator()(
+        Expression const& x0, Expression const& x1) {
+      Value vp(this->cell);
+      Value vx0(x0.cell);
+      Value vx1(x1.cell);
+      Expression expression;
+      expression.cell = predicate(vp, sequence(vx0, vx1)).cell;
+      return expression;
+    }
+
     Expression operator^(Expression const& l, Expression const& r) {
       Value x0(l.cell);
       ASSERT(symbolp(x0) || predicatep(x0));
@@ -857,6 +891,7 @@ JEST_DEFINE(bar);
 JEST_DEFINE(Bat);
 JEST_DEFINE(bat);
 JEST_DEFINE(baz);
+JEST_DEFINE(spam);
 
 ASSERT(foo == values::error);
 ASSERT(sequence_first(evaluation::quote((Foo, Bar))) == evaluation::quote(Foo));
@@ -872,19 +907,36 @@ ASSERT(~(Bar = Bar, foo ^ Bar = foo, foo) == evaluation::quote(foo ^ Bar));
 ASSERT(~(Bar = Bar, foo ^ Bar = foo, foo) != evaluation::quote(foo ^ Bat));
 ASSERT(~(Foo = Foo, Foo) == evaluation::quote(Foo));
 ASSERT(~(Foo = Foo, Bar = Foo, Bar) == evaluation::quote(Foo));
-ASSERT(typingp(~(
-      Bat = Bat,
-      bat ^ Bat = bat,
-      (foo(bar ^ Bar) ^ Bat) = bat,
-      baz ^ Bar = baz,
-      foo(baz))));
 ASSERT(~(
       Bat = Bat,
       bat ^ Bat = bat,
-      (foo(bar ^ Bar) ^ Bat) = bat,
+      foo(bar ^ Bar) ^ Bat = bat,
       baz ^ Bar = baz,
       foo(baz)) ==
     evaluation::quote(bat ^ Bat));
+ASSERT(~(
+      Bat = Bat,
+      bat ^ Bat = bat,
+      foo(bar ^ Bar) ^ Bat = bat,
+      spam(bar ^ Bar) ^ Bat = foo(bar),
+      baz ^ Bar = baz,
+      spam(baz)) ==
+    evaluation::quote(bat ^ Bat));
+ASSERT(~(
+      Bat = Bat,
+      bat ^ Bat = bat,
+      foo(bar ^ Bar, spam ^ Bat) ^ Bat = bat,
+      baz ^ Bar = baz,
+      foo(baz)) ==
+    values::error);
+ASSERT(~(
+      Bat = Bat,
+      bat ^ Bat = bat,
+      foo(bar ^ Bar, spam ^ Bat) ^ Bat = bat,
+      baz ^ Bar = baz,
+      foo ^ Bat = bat,
+      foo(baz, foo)) ==
+   evaluation::quote(bat ^ Bat));
 
 int main() {
   return 0;
