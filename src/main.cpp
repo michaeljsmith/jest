@@ -246,7 +246,7 @@ namespace evaluation {
       } else if (errorp(expression)) {
         return expression;
       }
-      return list(tag_binding, pattern, expression);
+      return list(tag_rule, pattern, expression);
     }
 
     bool rulep(Value value) {
@@ -500,14 +500,51 @@ namespace evaluation {
       return binding(symbol, quotation(value));
     }
 
-    Value match_pattern_recurse(
-        Value const& /*arguments*/, Value const& pattern,
-        Value const& /*predicate*/) {
+    Value match_pattern_recurse(Value const& arguments,
+        Value const& pattern, Value const& value);
+
+    Value match_pattern_type_recurse(Value const& arguments,
+        Value const& pattern_type, Value const& value_type) {
+      ASSERT(symbolp(pattern_type));
+      ASSERT(symbolp(value_type));
+
+      if (pattern_type == value_type) {
+        return arguments;
+      } else {
+        ASSERT(0);
+        return fail;
+      }
+    }
+
+    Value match_pattern_typing_recurse(
+        Value arguments, Value const& pattern, Value const& value) {
+      ASSERT(typingp(pattern));
+      if (!typingp(value)) {
+        ASSERT(0);
+        return fail;
+      }
+
+      Value result0 = match_pattern_type_recurse(
+          arguments, typing_type(pattern), typing_type(value));
+      if (failp(result0) || errorp(result0)) {
+        ASSERT(0);
+        return result0;
+      }
+
+      arguments = result0;
+
+      Value symbol = typing_pattern(pattern);
+      ASSERT(symbolp(symbol));
+      Value new_binding = cons(symbol, typing_pattern(value));
+      return cons(new_binding, arguments);
+    }
+
+    Value match_pattern_recurse(Value const& arguments,
+        Value const& pattern, Value const& value) {
       ASSERT(!rulep(pattern));
       ASSERT(!bindingp(pattern));
       if (typingp(pattern)) {
-        ASSERT(0);
-        return nothing;
+        return match_pattern_typing_recurse(arguments, pattern, value);
       } else if (predicatep(pattern)) {
         ASSERT(0);
         return nothing;
@@ -527,11 +564,22 @@ namespace evaluation {
     Value match_rule(Value const& rule, Value const& predicate) {
       ASSERT(rulep(rule));
       ASSERT(predicatep(predicate));
-      Value arguments = match_pattern(rule_pattern(rule), predicate);
+      Value pattern = rule_pattern(rule);
+      ASSERT(typingp(pattern));
+      Value predicate_pattern = typing_pattern(pattern);
+      Value type = typing_type(pattern);
+      ASSERT(predicatep(predicate_pattern));
+      if (predicate_operator(predicate_pattern) != predicate_operator(predicate)) {
+        ASSERT(0);
+        return fail;
+      }
+
+      Value arguments = match_pattern(
+          predicate_argument(predicate_pattern), predicate_argument(predicate));
       if (arguments == fail) {
         return fail;
       }
-      return cons(arguments, rule_expression(rule));
+      return list(type, arguments, rule_expression(rule));
     }
 
     Value lookup_rule_recurse(
@@ -582,10 +630,25 @@ namespace evaluation {
       return result;
     }
 
+    Value bind_arguments_recurse(
+        Value const& environment, Value const& arguments) {
+      if (nothingp(arguments)) {
+        return environment;
+      }
+
+      ASSERT(consp(arguments));
+      Value argument = car(arguments);
+      Value symbol = car(argument);
+      ASSERT(symbolp(symbol));
+      Value value = cdr(argument);
+      Value new_binding = binding(symbol, quotation(value));
+      Value new_environment = conjunction(new_binding, environment);
+      return bind_arguments_recurse(new_environment, cdr(arguments));
+    }
+
     Value bind_arguments(
-        Value const& /*environment*/, Value const& /*arguments*/) {
-      ASSERT(0);
-      return nothing;
+        Value const& environment, Value const& arguments) {
+      return bind_arguments_recurse(environment, arguments);
     }
 
     Value evaluate_predicate(
@@ -605,8 +668,10 @@ namespace evaluation {
         return result;
       }
       ASSERT(consp(result));
-      Value arguments = car(result);
-      Value expression = cadr(result);
+      Value type = car(result);
+      Value arguments = cadr(result);
+      Value expression = caddr(result);
+      ASSERT(nothingp(cdddr(result)));
 
       Value new_environment = bind_arguments(environment, arguments);
       return evaluate(new_environment, expression);
@@ -801,18 +866,25 @@ ASSERT((Foo = Foo, Foo) != values::error);
 ASSERT((Bar = Bar, foo ^ Bar = foo, foo) != values::error);
 ASSERT((Bar = Bar, foo ^ Bar = foo, foo ^ Bar) != values::error);
 ASSERT(typingp(~(Bar = Bar, foo ^ Bar = foo, foo ^ Bar)));
+ASSERT(typingp(~(Bar = Bar, foo ^ Bar = foo, foo)));
 ASSERT(~(Bar = Bar, foo ^ Bar = foo, foo ^ Bar) == evaluation::quote(foo ^ Bar));
 ASSERT(~(Bar = Bar, foo ^ Bar = foo, foo) == evaluation::quote(foo ^ Bar));
 ASSERT(~(Bar = Bar, foo ^ Bar = foo, foo) != evaluation::quote(foo ^ Bat));
 ASSERT(~(Foo = Foo, Foo) == evaluation::quote(Foo));
 ASSERT(~(Foo = Foo, Bar = Foo, Bar) == evaluation::quote(Foo));
-//ASSERT(~(
-//      Bat = Bat,
-//      bat ^ Bat = bat,
-//      (foo(bar ^ Bar) ^ Bat) = bat,
-//      baz ^ Bar = baz,
-//      foo(baz)) ==
-//    evaluation::quote(bat));
+ASSERT(typingp(~(
+      Bat = Bat,
+      bat ^ Bat = bat,
+      (foo(bar ^ Bar) ^ Bat) = bat,
+      baz ^ Bar = baz,
+      foo(baz))));
+ASSERT(~(
+      Bat = Bat,
+      bat ^ Bat = bat,
+      (foo(bar ^ Bar) ^ Bat) = bat,
+      baz ^ Bar = baz,
+      foo(baz)) ==
+    evaluation::quote(bat ^ Bat));
 
 int main() {
   return 0;
