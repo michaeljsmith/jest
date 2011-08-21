@@ -59,8 +59,11 @@ module_bin_path=$(config_prefix)/$(module_bin_dir)
 source_dependency_file=$(module_dep_path)/.$(dependency_extension)
 
 # Main targets. Add others here to taste.
-.PHONY: default clean
+.PHONY: default clean run
 default: $(module_target) $(config_prefix)/.$(dirmarker_extension)
+
+run: default
+	./out/bin/jest
 
 clean:
 	rm -rf $(config_prefix)
