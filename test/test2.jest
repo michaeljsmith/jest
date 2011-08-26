@@ -1,9 +1,0 @@
-<testui n:int> =
-	<frame
-		<panel j:int> =
-			<horizontal
-				<edit j>
-				<foo j>>
-		<foo k:int> =
-			<label k>
-		<panel n>>
