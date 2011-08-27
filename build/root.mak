@@ -35,11 +35,11 @@ $(src_dir)/%: $(obj_dir)/%.input.jest.evaluated
 $(obj_dir)/%.jest.evaluated: $(obj_dir)/%.jest.preprocessed
 	cp $< $@
 
-$(obj_dir)/%.jest.preprocessed: $(obj_dir)/%.jest.stripped
+$(obj_dir)/%.jest.preprocessed: $(obj_dir)/%.jest.collated
 	cp $< $@
 
-$(obj_dir)/%.jest.stripped: $(src_dir)/%.jest
-	cp $< $@
+$(obj_dir)/%.jest.collated: $(src_dir)/%.jest
+	sed -nf build/scripts/import.sed $< | sed 'N;N;s/\n//' | sed -f - $< >$@
 
 %/.$(dirmarker_ext):
 	@mkdir -p $(@D)
