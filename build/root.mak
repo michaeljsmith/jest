@@ -29,13 +29,13 @@ $(obj_dir)/%.jest.$(dep_ext): $(src_dir)/%.jest
 $(obj_dir)/%.input.jest.$(out_ext): $(src_dir)/%.input.jest
 	bash build/scripts/out_mak.jest.sh $(src_dir)/$* $(obj_dir)/$*.input.jest > $@
 
-$(src_dir)/%: $(obj_dir)/%.input.jest.evaluated | $(obj_dir)/%$(dirmarker_ext)
+$(src_dir)/%: $(obj_dir)/%.input.jest.evaluated
 	cp $< $@
 
-$(obj_dir)/%.jest.evaluated: $(obj_dir)/%.jest.preprocessed | $(obj_dir)/%$(dirmarker_ext)
+$(obj_dir)/%.jest.evaluated: $(obj_dir)/%.jest.preprocessed
 	cp $< $@
 
-$(obj_dir)/%.jest.preprocessed: $(obj_dir)/%.jest.stripped | $(obj_dir)/%$(dirmarker_ext)
+$(obj_dir)/%.jest.preprocessed: $(obj_dir)/%.jest.stripped
 	cp $< $@
 
 $(obj_dir)/%.jest.stripped: $(src_dir)/%.jest

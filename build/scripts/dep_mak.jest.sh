@@ -2,6 +2,7 @@
 
 input_file=$1
 intermediate_file_stem=$2
+stripped_file=${intermediate_file_stem}.stripped
 preprocessed_file=${intermediate_file_stem}.preprocessed
 
 imported_files=$(sed -n -e 's/^\s*import\s\+\(.*\).*$/\1/p' $input_file)
@@ -13,4 +14,5 @@ done;
 echo -e ""
 echo -e ""
 
-echo -e "${preprocessed_file}: \$(imported_files)"
+echo -e "${preprocessed_file}: ${stripped_file} \$(imported_files)"
+echo -e "${evaluated_file}: ${preprocessed_file}"
