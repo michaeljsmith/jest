@@ -33,14 +33,14 @@ $(src_dir)/%: $(obj_dir)/%.input.jest.evaluated
 	cp $< $@
 
 $(obj_dir)/%.jest.evaluated: $(obj_dir)/%.jest.preprocessed
-	cp $< $@
+	echo "" > $@
 
 $(obj_dir)/%.jest.preprocessed: $(obj_dir)/%.jest.preprocessed.gen
 	$< > $@
 .PRECIOUS: $(obj_dir)/%.jest.preprocessed
 
 $(obj_dir)/%.jest.preprocessed.gen: $(obj_dir)/%.jest.predeclared $(obj_dir)/%.jest.collated build/fragments/preprocess_hdr.cpp build/fragments/preprocess_mid.cpp build/fragments/preprocess_ftr.cpp
-	$(CXX) $(CXXFLAGS) -o $@ -include build/fragments/preprocess_hdr.cpp -include $(obj_dir)/$*.jest.predeclared -include build/fragments/preprocess_mid.cpp -include $(obj_dir)/$*.jest.collated build/fragments/preprocess_ftr.cpp
+	$(CXX) $(CXXFLAGS) -o $@ -D PREDECLARED_FILE="$(obj_dir)/$*.jest.predeclared" -D COLLATED_FILE="$(obj_dir)/$*.jest.collated" build/fragments/preprocess.cpp
 
 $(obj_dir)/%.jest.predeclared: $(obj_dir)/%.jest.collated
 	grep -o "[A-Za-z_]\+" $< | sort | uniq | sed -e 's/^\(.*\)$$/JEST_DEFINE(\1)/' > $@

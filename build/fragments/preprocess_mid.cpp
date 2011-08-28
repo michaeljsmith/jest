@@ -1,2 +1,0 @@
-int main() {
-  DETAIL::output(
