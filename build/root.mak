@@ -35,14 +35,20 @@ $(src_dir)/%: $(obj_dir)/%.input.jest.evaluated
 $(obj_dir)/%.jest.evaluated: $(obj_dir)/%.jest.preprocessed
 	cp $< $@
 
-$(obj_dir)/%.jest.preprocessed: $(obj_dir)/%.jest.predeclared $(obj_dir)/%.jest.collated
-	cat $^ > $@
+$(obj_dir)/%.jest.preprocessed: $(obj_dir)/%.jest.preprocessed.gen
+	$< > $@
+.PRECIOUS: $(obj_dir)/%.jest.preprocessed
+
+$(obj_dir)/%.jest.preprocessed.gen: $(obj_dir)/%.jest.predeclared $(obj_dir)/%.jest.collated build/fragments/preprocess_hdr.cpp build/fragments/preprocess_mid.cpp build/fragments/preprocess_ftr.cpp
+	$(CXX) $(CXXFLAGS) -o $@ -include build/fragments/preprocess_hdr.cpp -include $(obj_dir)/$*.jest.predeclared -include build/fragments/preprocess_mid.cpp -include $(obj_dir)/$*.jest.collated build/fragments/preprocess_ftr.cpp
 
 $(obj_dir)/%.jest.predeclared: $(obj_dir)/%.jest.collated
 	grep -o "[A-Za-z_]\+" $< | sort | uniq | sed -e 's/^\(.*\)$$/JEST_DEFINE(\1)/' > $@
+.PRECIOUS: $(obj_dir)/%.jest.predeclared
 
 $(obj_dir)/%.jest.collated: $(src_dir)/%.jest
 	sed -nf build/scripts/import.sed $< | sed 'N;N;s/\n//' | sed -f - $< >$@
+.PRECIOUS: $(obj_dir)/%.jest.collated
 
 %/.$(dirmarker_ext):
 	@mkdir -p $(@D)
