@@ -5,7 +5,7 @@ namespace DETAIL {
   };
 
   template <typename T> void output_preprocessed(Finite<T> const&) {
-    puts(get_label((T*)0));
+    printf("%s", get_label((T*)0));
   }
 
   template <typename T> struct TypeDeclaration {
@@ -13,9 +13,9 @@ namespace DETAIL {
   };
 
   template <typename T> void output_preprocessed(TypeDeclaration<T> const& declaration) {
-    printf("DECLARE ");
+    printf("struct ");
     output_preprocessed(declaration.type);
-    printf("\n");
+    printf(" {};\n");
   }
 
   template <typename T> TypeDeclaration<T> operator~(T const&) {

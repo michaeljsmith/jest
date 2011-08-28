@@ -9,6 +9,9 @@ src_dir=.
 obj_dir=obj
 root_out=$(obj_dir)/.$(out_ext)
 
+CXX=g++
+CXXFLAGS=-Wall -Wextra -Werror
+
 .PHONY: default clean all_outputs
 default: all_outputs
 
@@ -32,8 +35,11 @@ $(obj_dir)/%.input.jest.$(out_ext): $(src_dir)/%.input.jest
 $(src_dir)/%: $(obj_dir)/%.input.jest.evaluated
 	cp $< $@
 
-$(obj_dir)/%.jest.evaluated: $(obj_dir)/%.jest.preprocessed
-	echo "" > $@
+$(obj_dir)/%.jest.evaluated: $(obj_dir)/%.jest.evaluated.gen
+	$< > $@
+
+$(obj_dir)/%.jest.evaluated.gen: $(obj_dir)/%.jest.preprocessed
+	$(CXX) $(CXXFLAGS) -I. -o $@ -D PREPROCESSED_FILE=\"$(obj_dir)/$*.jest.preprocessed\" build/fragments/evaluate.cpp
 
 $(obj_dir)/%.jest.preprocessed: $(obj_dir)/%.jest.preprocessed.gen
 	$< > $@
