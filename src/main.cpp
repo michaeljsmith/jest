@@ -1,6 +1,7 @@
 #include <string>
 #include <stdio.h>
 #include <boost/variant.hpp>
+#include <boost/none.hpp>
 #include <tr1/tuple>
 
 using namespace std;
@@ -53,20 +54,24 @@ struct Predicate : tuple<Symbol, Object> {
 
 struct SequenceNode : tuple<Object, Sequence> {
   SequenceNode(Object const& head, Sequence const& tail): tuple<Object, Sequence>(head, tail) {}
+  Object const& getHead() const {return get<0>(*this);}
+  Sequence const& getTail() const {return get<1>(*this);}
 };
 
 struct PredicatePattern;
-struct SequenceNodePattern;
+struct SequencePatternNode;
 struct Parameter;
 
 struct EmptyPattern : tuple<> {};
 EmptyPattern emptyPattern;
 
-typedef variant<recursive_wrapper<SequenceNodePattern>, EmptyPattern> SequencePattern;
+typedef variant<recursive_wrapper<SequencePatternNode>, EmptyPattern> SequencePattern;
 typedef variant<recursive_wrapper<PredicatePattern>, recursive_wrapper<Parameter>, SequencePattern, Object> Pattern;
 
-struct SequenceNodePattern : tuple<Pattern, SequencePattern> {
-  SequenceNodePattern(Pattern const& head, SequencePattern const& tail): tuple<Pattern, SequencePattern>(head, tail) {}
+struct SequencePatternNode : tuple<Pattern, SequencePattern> {
+  SequencePatternNode(Pattern const& head, SequencePattern const& tail): tuple<Pattern, SequencePattern>(head, tail) {}
+  Pattern const& getHead() const {return get<0>(*this);}
+  SequencePattern const& getTail() const {return get<1>(*this);}
 };
 
 struct Parameter : tuple<Symbol> {
@@ -111,6 +116,8 @@ struct Binding : tuple<Object, Pattern, Expression> {
 
 struct MatchBinding : tuple<Symbol, Object> {
   MatchBinding(Symbol const& symbol, Object const& object): tuple<Symbol, Object>(symbol, object) {}
+  Symbol const& getSymbol() const {return get<0>(*this);}
+  Object const& getObject() const {return get<1>(*this);}
 };
 
 struct MatchFail : tuple<> {};
@@ -127,11 +134,31 @@ typedef variant<MatchBindingList, MatchFail> MatchResult;
 struct MatchBindingListNode : tuple<MatchBinding, MatchBindingList> {
   MatchBindingListNode(MatchBinding const& binding, MatchBindingList const& tail):
     tuple<MatchBinding, MatchBindingList>(binding, tail) {}
+  MatchBinding const& getBinding() const {return get<0>(*this);}
+  MatchBindingList const& getTail() const {return get<1>(*this);}
 };
 
-MatchBindingList consBindingList(MatchBinding const& binding, MatchBindingList const& tail)
+MatchBindingList consMatchBindingList(MatchBinding const& binding, MatchBindingList const& tail)
 {
   return MatchBindingList(MatchBindingListNode(binding, tail));
+}
+
+typedef variant<Object, none_t> MatchBindingLookupResult;
+struct MatchResultsUplooker : public static_visitor<MatchBindingLookupResult> {
+  Symbol symbol;
+  MatchResultsUplooker(Symbol const& symbol): symbol(symbol) {}
+  MatchBindingLookupResult operator()(EmptyMatchList const&) const {return none_t();}
+  MatchBindingLookupResult operator()(MatchBindingListNode const& node) const {
+    if (node.getBinding().getSymbol() == symbol)
+      return node.getBinding().getObject();
+    return apply_visitor(*this, node.getTail());
+  }
+
+  MatchBindingLookupResult operator()(MatchBindingList const& list) const {return apply_visitor(*this, list);}
+  MatchBindingLookupResult operator()(MatchFail const&) const {return none_t();}
+};
+MatchBindingLookupResult lookupMatchBinding(MatchResult const& results, Symbol const& symbol) {
+  return apply_visitor(MatchResultsUplooker(symbol), results);
 }
 
 struct Matcher : public static_visitor<> {
@@ -147,7 +174,7 @@ struct Matcher : public static_visitor<> {
     MatchBinding binding;
     Binder(MatchBinding const& binding): binding(binding) {}
     MatchResult operator()(MatchFail const& old) const {return old;}
-    MatchResult operator()(MatchBindingList const& old) const {return consBindingList(binding, old);}
+    MatchResult operator()(MatchBindingList const& old) const {return consMatchBindingList(binding, old);}
   };
   void bind(Symbol const& symbol, Object const& object) {
     result = apply_visitor(Binder(MatchBinding(symbol, object)), result);
@@ -157,14 +184,35 @@ struct Matcher : public static_visitor<> {
     fail();
   }
  
-  //typedef variant<recursive_wrapper<PredicatePattern>, recursive_wrapper<Parameter>, SequencePattern, Object> Pattern;
   template <typename O> void operator()(Object const& pattern, O const& object) {
     if (!(pattern == Object(object)))
       fail();
   }
 
+  struct ParameterMatcher : public static_visitor<> {
+    Matcher& matcher;
+    Parameter parameter;
+    Object newObject;
+    ParameterMatcher(Matcher& matcher, Parameter const& parameter, Object const& newObject):
+      matcher(matcher), parameter(parameter), newObject(newObject) {}
+    void operator()(Object const existingObject) const {if (!(existingObject == newObject)) matcher.fail();}
+    void operator()(none_t) const {matcher.bind(parameter.getName(), newObject);}
+  };
   template <typename O> void operator()(Parameter const& parameter, O const& object) {
-    bind(parameter.getName(), object);
+    MatchBindingLookupResult lookupResult = lookupMatchBinding(result, parameter.getName());
+    apply_visitor(ParameterMatcher(*this, parameter, object), lookupResult);
+  }
+
+  void operator()(SequencePattern const& sequencePattern, Sequence const& sequence) {
+    apply_visitor(*this, sequencePattern, sequence);
+  }
+
+  void operator()(SequencePatternNode const& patternNode, SequenceNode const& node) {
+    apply_visitor(*this, patternNode.getHead(), node.getHead());
+    apply_visitor(*this, patternNode.getTail(), node.getTail());
+  }
+
+  void operator()(EmptyPattern const&, Empty const&) {
   }
 };
 
@@ -177,10 +225,22 @@ MatchResult match(Pattern const& pattern, Object const& object) {
 ASSERT(MatchResult(matchFail) == match(Object(Finite(Symbol("a"))), Finite(Symbol("b"))));
 ASSERT(!(MatchResult(matchFail) == match(Object(Finite(Symbol("a"))), Finite(Symbol("a")))));
 ASSERT(MatchResult(emptyMatchList) == match(Object(Finite(Symbol("a"))), Finite(Symbol("a"))));
-ASSERT(MatchResult(consBindingList(MatchBinding(Symbol("a"), Finite(Symbol("b"))), emptyMatchList)) ==
+ASSERT(MatchResult(consMatchBindingList(MatchBinding(Symbol("a"), Finite(Symbol("b"))), emptyMatchList)) ==
     match(Parameter(Symbol("a")), Finite(Symbol("b"))));
+ASSERT(MatchResult(matchFail) == match(SequencePattern(SequencePatternNode(Pattern(Object(Finite(Symbol("a")))),
+          emptyPattern)), Sequence(SequenceNode(Object(Finite(Symbol("b"))), empty))));
+ASSERT(MatchResult(emptyMatchList) == match(SequencePattern(SequencePatternNode(Pattern(Object(Finite(Symbol("a")))),
+          emptyPattern)), Sequence(SequenceNode(Object(Finite(Symbol("a"))), empty))));
+ASSERT(MatchResult(emptyMatchList) == match(
+      SequencePattern(SequencePatternNode(Pattern(Object(Finite(Symbol("a")))), SequencePatternNode(Pattern(Object(Finite(Symbol("b")))), emptyPattern))),
+      Sequence(SequenceNode(Object(Finite(Symbol("a"))), SequenceNode(Object(Finite(Symbol("b"))), empty)))));
+ASSERT(MatchResult(consMatchBindingList(MatchBinding(Symbol("a"), Finite(Symbol("b"))), emptyMatchList)) == match(
+      SequencePattern(SequencePatternNode(Pattern(Parameter(Symbol("a"))), SequencePatternNode(Pattern(Parameter(Symbol("a"))), emptyPattern))),
+      Sequence(SequenceNode(Object(Finite(Symbol("b"))), SequenceNode(Object(Finite(Symbol("b"))), empty)))));
+ASSERT(MatchResult(matchFail) == match(
+      SequencePattern(SequencePatternNode(Pattern(Parameter(Symbol("a"))), SequencePatternNode(Pattern(Parameter(Symbol("a"))), emptyPattern))),
+      Sequence(SequenceNode(Object(Finite(Symbol("b"))), SequenceNode(Object(Finite(Symbol("c"))), empty)))));
 
 int main() {
-  //SequencePattern pattern = emptyPattern;
-  //Sequence object = empty;
+  return 0;
 }
