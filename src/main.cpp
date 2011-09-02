@@ -50,6 +50,8 @@ typedef variant<recursive_wrapper<Predicate>, Sequence, Finite> Object;
 
 struct Predicate : tuple<Symbol, Object> {
   Predicate(Symbol const& operator_, Object const& argument): tuple<Symbol, Object>(operator_, argument) {}
+  Symbol const& getOperator() const {return get<0>(*this);}
+  Object const& getArgument() const {return get<1>(*this);}
 };
 
 struct SequenceNode : tuple<Object, Sequence> {
@@ -83,6 +85,8 @@ struct Parameter : tuple<Symbol> {
 };
 
 struct PredicatePattern : tuple<Symbol, Pattern> {
+  Symbol const& getOperator() const {return get<0>(*this);}
+  Pattern const& getArgument() const {return get<1>(*this);}
   PredicatePattern(Symbol const& operator_, Pattern const& argument):
     tuple<Symbol, Pattern>(operator_, argument) {}
 };
@@ -214,6 +218,12 @@ struct Matcher : public static_visitor<> {
 
   void operator()(EmptyPattern const&, Empty const&) {
   }
+
+  void operator()(PredicatePattern const& predicatePattern, Predicate const& predicate) {
+    if (predicatePattern.getOperator() != predicate.getOperator())
+      fail();
+    apply_visitor(*this, predicatePattern.getArgument(), predicate.getArgument());
+  }
 };
 
 MatchResult match(Pattern const& pattern, Object const& object) {
@@ -240,7 +250,10 @@ ASSERT(MatchResult(consMatchBindingList(MatchBinding(Symbol("a"), Finite(Symbol(
 ASSERT(MatchResult(matchFail) == match(
       SequencePattern(SequencePatternNode(Pattern(Parameter(Symbol("a"))), SequencePatternNode(Pattern(Parameter(Symbol("a"))), emptyPattern))),
       Sequence(SequenceNode(Object(Finite(Symbol("b"))), SequenceNode(Object(Finite(Symbol("c"))), empty)))));
-
+ASSERT(MatchResult(matchFail) == match(
+      PredicatePattern(Symbol("foo"), Parameter(Symbol("a"))), Predicate(Symbol("bar"), Finite(Symbol("b")))));
+ASSERT(MatchResult(consMatchBindingList(MatchBinding(Symbol("a"), Finite(Symbol("b"))), emptyMatchList)) == match(
+      PredicatePattern(Symbol("foo"), Parameter(Symbol("a"))), Predicate(Symbol("foo"), Finite(Symbol("b")))));
 int main() {
   return 0;
 }
