@@ -35,6 +35,8 @@
 # TODO: Handle includes outside of tree.
 ##############################################################################
 
+CXXFLAGS=--std=c++11
+
 # Basic configuration variables.
 config=out
 module_name=jest
