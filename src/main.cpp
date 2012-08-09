@@ -21,63 +21,51 @@ struct AssertRaiser {
   ((x), __FILE__, __LINE__, #x);
 
 namespace utils {namespace lists {
-  namespace detail {
-
-    template <typename T> struct List {
-      struct Node {
-        Node(T head, Node const* tail): head(head), tail(tail) {}
-        T const head;
-        Node const* const tail;
-      };
-
-      Node const* const node;
-
-      template <typename U> friend List<U> nil();
-      template <typename U> friend bool nilp(List<U> l);
-      template <typename U> friend List<U> cons(U head, List<U> tail);
-      template <typename U> friend bool consp(List<U> l);
-      template <typename U> friend U car(List<U> l);
-      template <typename U> friend List<U> cdr(List<U> l);
-
-    private:
-      explicit List(Node const* node): node(node) {}
+  template <typename T> class List {
+    struct Node {
+      Node(T head, Node const* tail): head(head), tail(tail) {}
+      T const head;
+      Node const* const tail;
     };
 
-    template <typename T> bool nilp(List<T> l) {
-      return l.node == nullptr;
-    }
+    Node const* const node;
 
-    template <typename T> List<T> nil() {
-      return List<T>(nullptr);
-    }
+    template <typename U> friend List<U> nil();
+    template <typename U> friend bool nilp(List<U> l);
+    template <typename U> friend List<U> cons(U head, List<U> tail);
+    template <typename U> friend bool consp(List<U> l);
+    template <typename U> friend U car(List<U> l);
+    template <typename U> friend List<U> cdr(List<U> l);
 
-    template <typename T> bool consp(List<T> l) {
-      return l.node != nullptr;
-    }
+    explicit List(Node const* node): node(node) {}
+  };
 
-    template <typename T> List<T> cons(T head, List<T> tail) {
-      typedef typename List<T>::Node Node;
-      return List<T>(new Node(head, tail.node));
-    }
-
-    template <typename T> T car(List<T> l) {
-      ASSERT(!nilp(l));
-      return l.node->head;
-    }
-
-    template <typename T> List<T> cdr(List<T> l) {
-      ASSERT(!nilp(l));
-      return List<T>(l.node->tail);
-    }
+  template <typename T> bool nilp(List<T> l) {
+    return l.node == nullptr;
   }
 
-  using detail::List;
-  using detail::nil;
-  using detail::nilp;
-  using detail::cons;
-  using detail::consp;
-  using detail::car;
-  using detail::cdr;
+  template <typename T> List<T> nil() {
+    return List<T>(nullptr);
+  }
+
+  template <typename T> bool consp(List<T> l) {
+    return l.node != nullptr;
+  }
+
+  template <typename T> List<T> cons(T head, List<T> tail) {
+    typedef typename List<T>::Node Node;
+    return List<T>(new Node(head, tail.node));
+  }
+
+  template <typename T> T car(List<T> l) {
+    ASSERT(!nilp(l));
+    return l.node->head;
+  }
+
+  template <typename T> List<T> cdr(List<T> l) {
+    ASSERT(!nilp(l));
+    return List<T>(l.node->tail);
+  }
 }}
 
 namespace utils {namespace trees {
@@ -86,96 +74,88 @@ namespace utils {namespace trees {
       LEAF,
       BRANCH
     };
-
-    template <typename T> class Tree {
-
-      struct Node;
-
-      struct Leaf {
-        explicit Leaf(T val): val(val) {}
-        T const val;
-      };
-
-      struct Branch {
-        Branch(Node const* left, Node const* right)
-          : left(left), right(right) {}
-        Node const* const left;
-        Node const* const right;
-      };
-
-      struct Node {
-        Node(Leaf leaf): type(Type::LEAF) {
-          new (&this->leaf) Leaf(leaf);
-        }
-
-        Node(Branch branch): type(Type::BRANCH) {
-          new (&this->branch) Branch(branch);
-        }
-
-        Type type;
-        union {
-          Leaf leaf;
-          Branch branch;
-        };
-      };
-
-      explicit Tree(Node const* node): node(node) {
-        ASSERT(node != nullptr);
-      }
-
-      Node const* const node;
-
-      template <typename U> friend Tree<U> leaf(U val);
-      template <typename U> friend Tree<U> branch(Tree<U> left, Tree<U> right);
-      template <typename U> friend bool leafp(Tree<U> t);
-      template <typename U> friend U leaf_val(Tree<U> t);
-      template <typename U> friend Tree<U> left(Tree<U> t);
-      template <typename U> friend Tree<U> right(Tree<U> t);
-    };
-
-    template <typename T> Tree<T> leaf(T val) {
-      typedef typename Tree<T>::Leaf Leaf;
-      typedef typename Tree<T>::Node Node;
-      return Tree<T>(new Node(Leaf(val)));
-    }
-
-    template <typename T> Tree<T> branch(Tree<T> left, Tree<T> right) {
-      typedef typename Tree<T>::Branch Branch;
-      typedef typename Tree<T>::Node Node;
-      return Tree<T>(new Node(Branch(left.node, right.node)));
-    }
-
-    template <typename T> bool leafp(Tree<T> t) {
-      return t.node->type == Type::LEAF;
-    }
-
-    template <typename T> T leaf_val(Tree<T> t) {
-      ASSERT(leafp(t));
-      return t.node->leaf.val;
-    }
-
-    template <typename T> bool branchp(Tree<T> t) {
-      return !leafp(t);
-    }
-
-    template <typename T> Tree<T> left(Tree<T> t) {
-      ASSERT(branchp(t));
-      return Tree<T>(t.node->branch.left);
-    }
-
-    template <typename T> Tree<T> right(Tree<T> t) {
-      ASSERT(branchp(t));
-      return Tree<T>(t.node->branch.right);
-    }
   }
 
-  using detail::leaf;
-  using detail::branch;
-  using detail::leafp;
-  using detail::leaf_val;
-  using detail::branchp;
-  using detail::left;
-  using detail::right;
+  template <typename T> class Tree {
+
+    struct Node;
+
+    struct Leaf {
+      explicit Leaf(T val): val(val) {}
+      T const val;
+    };
+
+    struct Branch {
+      Branch(Node const* left, Node const* right)
+        : left(left), right(right) {}
+      Node const* const left;
+      Node const* const right;
+    };
+
+    struct Node {
+      Node(Leaf leaf): type(detail::Type::LEAF) {
+        new (&this->leaf) Leaf(leaf);
+      }
+
+      Node(Branch branch): type(detail::Type::BRANCH) {
+        new (&this->branch) Branch(branch);
+      }
+
+      detail::Type type;
+      union {
+        Leaf leaf;
+        Branch branch;
+      };
+    };
+
+    explicit Tree(Node const* node): node(node) {
+      ASSERT(node != nullptr);
+    }
+
+    Node const* const node;
+
+    template <typename U> friend Tree<U> leaf(U val);
+    template <typename U> friend Tree<U> branch(Tree<U> left, Tree<U> right);
+    template <typename U> friend bool leafp(Tree<U> t);
+    template <typename U> friend U leaf_val(Tree<U> t);
+    template <typename U> friend Tree<U> left(Tree<U> t);
+    template <typename U> friend Tree<U> right(Tree<U> t);
+  };
+
+  template <typename T> Tree<T> leaf(T val) {
+    typedef typename Tree<T>::Leaf Leaf;
+    typedef typename Tree<T>::Node Node;
+    return Tree<T>(new Node(Leaf(val)));
+  }
+
+  template <typename T> Tree<T> branch(Tree<T> left, Tree<T> right) {
+    typedef typename Tree<T>::Branch Branch;
+    typedef typename Tree<T>::Node Node;
+    return Tree<T>(new Node(Branch(left.node, right.node)));
+  }
+
+  template <typename T> bool leafp(Tree<T> t) {
+    return t.node->type == detail::Type::LEAF;
+  }
+
+  template <typename T> T leaf_val(Tree<T> t) {
+    ASSERT(leafp(t));
+    return t.node->leaf.val;
+  }
+
+  template <typename T> bool branchp(Tree<T> t) {
+    return !leafp(t);
+  }
+
+  template <typename T> Tree<T> left(Tree<T> t) {
+    ASSERT(branchp(t));
+    return Tree<T>(t.node->branch.left);
+  }
+
+  template <typename T> Tree<T> right(Tree<T> t) {
+    ASSERT(branchp(t));
+    return Tree<T>(t.node->branch.right);
+  }
 }}
 
 namespace model {namespace symbols {
