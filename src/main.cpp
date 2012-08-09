@@ -1,3 +1,4 @@
+// {{{ Prelude
 #include <string>
 #include <stdio.h>
 #include <boost/variant.hpp>
@@ -19,7 +20,9 @@ struct AssertRaiser {
 #define ASSERT_OBJ_NAME(a, b) ASSERT_OBJ_NAME_DETAIL(a, b)
 #define ASSERT(x) AssertRaiser ASSERT_OBJ_NAME(assertObj, __LINE__) \
   ((x), __FILE__, __LINE__, #x);
+// }}}
 
+// {{{ utils::lists::List
 namespace utils {namespace lists {
   template <typename T> class List {
     struct Node {
@@ -67,7 +70,9 @@ namespace utils {namespace lists {
     return List<T>(l.node->tail);
   }
 }}
+// }}}
 
+// {{{ utils::trees::Tree
 namespace utils {namespace trees {
   namespace detail {
     enum class Type {
@@ -157,13 +162,17 @@ namespace utils {namespace trees {
     return Tree<T>(t.node->branch.right);
   }
 }}
+// }}}
 
+// {{{ model::symbols::Symbol
 namespace model {namespace symbols {
   struct Symbol : public std::string {
     Symbol(std::string s): std::string(s) {}
   };
 }}
+// }}}
 
+// {{{ model::types::Type
 namespace model {namespace types {
   class Type {
     typedef model::symbols::Symbol Symbol;
@@ -214,15 +223,92 @@ namespace model {namespace types {
     return right(tp.tree);
   }
 }}
+// }}}
 
+// {{{ model::parameters::Parameter
 namespace model {namespace parameters {
-  struct Parameter;
-}}
+  class Parameter {
+    typedef model::symbols::Symbol Symbol;
+    typedef model::types::Type Type;
 
+    Parameter(Symbol name, Type type): name(name), type(type) {}
+
+    Symbol const name;
+    Type const type;
+
+    friend Parameter parameter(Symbol name, Type type);
+    friend Symbol parameter_name(Parameter parameter);
+    friend Type parameter_type(Parameter parameter);
+  };
+
+  inline Parameter parameter(Parameter::Symbol name, Parameter::Type type) {
+    return Parameter(name, type);
+  }
+
+  inline Parameter::Symbol parameter_name(Parameter parameter) {
+    return parameter.name;
+  }
+
+  inline Parameter::Type parameter_type(Parameter parameter) {
+    return parameter.type;
+  }
+}}
+// }}}
+
+// {{{ model::expressions::Expression
 namespace model {namespace expressions {
-  struct Expression;
-}}
+  class Expression {
+    typedef model::symbols::Symbol Symbol;
+    typedef utils::trees::Tree<Symbol> SymbolTree;
 
+    Expression(SymbolTree tree): tree(tree) {}
+
+    SymbolTree tree;
+
+    friend Expression ref(Symbol name);
+    friend bool refp(Expression tp);
+    friend Symbol ref_symbol(Expression name);
+    friend Expression form(Expression type_fn, Expression type_arg);
+    friend Expression form_fn(Expression tp);
+    friend Expression form_arg(Expression tp);
+  };
+
+  inline Expression ref(Expression::Symbol name) {
+    using namespace utils::trees;
+    return Expression(leaf(name));
+  }
+
+  inline bool refp(Expression tp) {
+    return leafp(tp.tree);
+  }
+
+  inline Expression::Symbol ref_symbol(Expression name) {
+    ASSERT(refp(name));
+    return leaf_val(name.tree);
+  }
+
+  inline Expression form(Expression type_fn, Expression type_arg) {
+    using namespace utils::trees;
+    return Expression(branch(type_fn.tree, type_arg.tree));
+  }
+
+  inline bool formp(Expression tp) {
+    return !refp(tp);
+  }
+
+  inline Expression form_fn(Expression tp) {
+    ASSERT(formp(tp));
+    return left(tp.tree);
+  }
+
+  inline Expression form_arg(Expression tp) {
+    ASSERT(formp(tp));
+    return right(tp.tree);
+  }
+}}
+// }}}
+
+// {{{ model::functions::Function*
 namespace model {namespace functions {
 
   namespace detail {
@@ -248,7 +334,9 @@ namespace model {namespace functions {
 
   using detail::Function;
 }}
+// }}}
 
+// {{{ Testing
 void test_lists() {
   using namespace utils::lists;
 
@@ -267,7 +355,9 @@ void test_trees() {
   ASSERT(2 == leaf_val(left(branch(leaf(2), leaf(3)))));
   ASSERT(3 == leaf_val(right(branch(leaf(2), leaf(3)))));
 }
+// }}}
 
+// {{{ Main
 int main() {
   test_lists();
   test_trees();
@@ -275,4 +365,4 @@ int main() {
   model::functions::Function* fn;
   return 0;
 }
-
+// }}}
