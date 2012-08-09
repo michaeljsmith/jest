@@ -165,7 +165,54 @@ namespace model {namespace symbols {
 }}
 
 namespace model {namespace types {
-  struct Type;
+  class Type {
+    typedef model::symbols::Symbol Symbol;
+    typedef utils::trees::Tree<Symbol> SymbolTree;
+
+    Type(SymbolTree tree): tree(tree) {}
+
+    SymbolTree tree;
+
+    friend Type name(Symbol name);
+    friend bool namep(Type tp);
+    friend Symbol name_symbol(Type name);
+    friend Type dependent(Type type_fn, Type type_arg);
+    friend Type dependent_fn(Type tp);
+    friend Type dependent_arg(Type tp);
+  };
+
+  inline Type name(Type::Symbol name) {
+    using namespace utils::trees;
+    return Type(leaf(name));
+  }
+
+  inline bool namep(Type tp) {
+    return leafp(tp.tree);
+  }
+
+  inline Type::Symbol name_symbol(Type name) {
+    ASSERT(namep(name));
+    return leaf_val(name.tree);
+  }
+
+  inline Type dependent(Type type_fn, Type type_arg) {
+    using namespace utils::trees;
+    return Type(branch(type_fn.tree, type_arg.tree));
+  }
+
+  inline bool dependentp(Type tp) {
+    return !namep(tp);
+  }
+
+  inline Type dependent_fn(Type tp) {
+    ASSERT(dependentp(tp));
+    return left(tp.tree);
+  }
+
+  inline Type dependent_arg(Type tp) {
+    ASSERT(dependentp(tp));
+    return right(tp.tree);
+  }
 }}
 
 namespace model {namespace parameters {
