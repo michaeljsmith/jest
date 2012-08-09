@@ -23,14 +23,14 @@ struct AssertRaiser {
 namespace utils {namespace lists {
   namespace detail {
 
-    template <typename T> struct ListNode {
-      ListNode(T head, ListNode const* tail): head(head), tail(tail) {}
-      T const head;
-      ListNode const* const tail;
-    };
-
     template <typename T> struct List {
-      ListNode<T> const* const node;
+      struct Node {
+        Node(T head, Node const* tail): head(head), tail(tail) {}
+        T const head;
+        Node const* const tail;
+      };
+
+      Node const* const node;
 
       template <typename U> friend List<U> nil();
       template <typename U> friend bool nilp(List<U> l);
@@ -40,8 +40,7 @@ namespace utils {namespace lists {
       template <typename U> friend List<U> cdr(List<U> l);
 
     private:
-      List(): node(nullptr) {}
-      List(T head, List tail): node(new ListNode<T>(head, tail.node)) {}
+      explicit List(Node const* node): node(node) {}
     };
 
     template <typename T> bool nilp(List<T> l) {
@@ -49,7 +48,7 @@ namespace utils {namespace lists {
     }
 
     template <typename T> List<T> nil() {
-      return List<T>();
+      return List<T>(nullptr);
     }
 
     template <typename T> bool consp(List<T> l) {
@@ -57,17 +56,18 @@ namespace utils {namespace lists {
     }
 
     template <typename T> List<T> cons(T head, List<T> tail) {
-      return List<T>(head, tail);
+      typedef typename List<T>::Node Node;
+      return List<T>(new Node(head, tail.node));
     }
 
     template <typename T> T car(List<T> l) {
       ASSERT(!nilp(l));
-      return l.node->head;;
+      return l.node->head;
     }
 
     template <typename T> List<T> cdr(List<T> l) {
       ASSERT(!nilp(l));
-      return l.node->tail;;
+      return List<T>(l.node->tail);
     }
   }
 
@@ -227,6 +227,8 @@ void test_lists() {
 
   ASSERT(nilp(nil<int>()));
   ASSERT(consp(cons(2, nil<int>())));
+  ASSERT(2 == car(cons(2, nil<int>())));
+  ASSERT(3 == car(cdr(cons(2, cons(3, nil<int>())))));
 }
 
 void test_trees() {
