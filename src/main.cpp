@@ -308,31 +308,44 @@ namespace model {namespace expressions {
 }}
 // }}}
 
-// {{{ model::functions::Function*
+// {{{ model::functions::Function
 namespace model {namespace functions {
+  class Function {
+    template <typename T> using List = utils::lists::List<T>;
+    typedef model::types::Type Type;
+    typedef model::parameters::Parameter Parameter;
+    typedef model::expressions::Expression Expression;
+    typedef List<Parameter const> ParameterList;
 
-  namespace detail {
-    using namespace utils::lists;
-    using namespace types;
-    using namespace parameters;
-    using namespace expressions;
+    Function(Type type, ParameterList params, Expression expr):
+      type(type), params(params), expr(expr) {}
 
-    struct Function {
-      Function(Type const* type, List<Parameter> const* params, Expression const* expr):
-        type(type), params(params), expr(expr) {
-        ASSERT(type != nullptr);
-        ASSERT(params != nullptr);
-        ASSERT(expr != nullptr);
-      }
+    Type const type;
+    ParameterList const params;
+    Expression const expr;
 
-      Type const* const type;
-      List<Parameter> const* const params;
-      Expression const* const expr;
-    };
+    friend Function fun(Type type, ParameterList params, Expression expr);
+    friend Type fun_type(Function fn);
+    friend ParameterList fun_params(Function fn);
+    friend Expression fun_expr(Function fn);
+  };
 
+  Function fun(Function::Type type,
+      Function::ParameterList params, Function::Expression expr) {
+    return Function(type, params, expr);
   }
 
-  using detail::Function;
+  Function::Type fun_type(Function fn) {
+    return fn.type;
+  }
+
+  Function::ParameterList fun_params(Function fn) {
+    return fn.params;
+  }
+
+  Function::Expression fun_expr(Function fn) {
+    return fn.expr;
+  }
 }}
 // }}}
 
