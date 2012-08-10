@@ -408,20 +408,83 @@ namespace model {namespace functions {
 }}
 // }}}
 
-// {{{ model::values::Value
+// {{{ model::values::Value (forward)
 namespace model {namespace values {
-  class Value {
-    typedef utils::strings::String String;
 
-  public:
+  namespace detail {
     enum class SubType {
       COMPOSITE,
       SYMBOL,
       INTEGER
     };
 
-  private:
     struct Node;
+
+    class Value {
+      typedef utils::strings::String String;
+      typedef Node Node;
+
+      public:
+      typedef SubType SubType;
+
+      private:
+      explicit Value(Node const* node): node_(node) {
+        assert(node != nullptr);
+      }
+
+      Node const* const node_;
+
+      friend Value value(Node const* node);
+      friend Node const* val_node(Value val);
+    };
+
+    inline Value value(Node const* node) {
+      return Value(node);
+    }
+
+    inline Node const* val_node(Value val) {
+      return val.node_;
+    }
+  }
+
+  using detail::Value;
+}}
+// }}}
+
+// {{{ model::bindings::Binding
+namespace model {namespace bindings {
+  class Binding {
+    typedef utils::strings::String String;
+    typedef model::values::Value Value;
+
+    Binding(String name, Value value): name_(name), value_(value) {}
+
+    String const name_;
+    Value const value_;
+
+    friend Binding binding(String name, Value value);
+    friend String binding_name(Binding bndng);
+    friend Value binding_val(Binding bndng);
+  };
+
+  inline Binding binding(Binding::String name, Binding::Value value) {
+    return Binding(name, value);
+  }
+
+  inline Binding::String binding_name(Binding bndng) {
+    return bndng.name_;
+  }
+
+  inline Binding::Value binding_val(Binding bndng) {
+    return bndng.value_;
+  }
+}}
+// }}}
+
+// {{{ model::values::Value
+namespace model {namespace values {
+  namespace detail {
+    using namespace utils::strings;
 
     struct Composite {
       Composite(Node const* fn, Node const* arg)
@@ -460,57 +523,43 @@ namespace model {namespace values {
         Integer integer;
       };
     };
-
-    explicit Value(Node const* node): node_(node) {
-      assert(node != nullptr);
-    }
-
-    Node const* const node_;
-
-    friend Value::SubType val_subtype(Value val);
-    friend Value composite(Value left, Value right);
-    friend Value symbol(String val);
-    friend Value integer(int val);
-    friend String symbol_val(Value val);
-    friend int integer_val(Value val);
-    friend Value comp_fn(Value val);
-    friend Value comp_arg(Value val);
-  };
+  }
 
   inline Value::SubType val_subtype(Value val) {
-    return val.node_->subtype;
+    return val_node(val)->subtype;
   }
 
   inline Value composite(Value fn, Value arg) {
-    return Value(new Value::Node(Value::Composite(fn.node_, arg.node_)));
+    return value(
+        new detail::Node(detail::Composite(val_node(fn), val_node(arg))));
   }
 
-  inline Value symbol(Value::String val) {
-    return Value(new Value::Node(Value::Symbol(val)));
+  inline Value symbol(utils::strings::String val) {
+    return value(new detail::Node(detail::Symbol(val)));
   }
 
   inline Value integer(int val) {
-    return Value(new Value::Node(Value::Integer(val)));
+    return value(new detail::Node(detail::Integer(val)));
   }
 
-  inline Value::String symbol_val(Value val) {
-    assert(val_subtype(val) == Value::SubType::SYMBOL);
-    return val.node_->symbol.val_;
+  inline utils::strings::String symbol_val(Value val) {
+    assert(val_subtype(val) == detail::SubType::SYMBOL);
+    return val_node(val)->symbol.val_;
   }
 
   inline int integer_val(Value val) {
-    assert(val_subtype(val) == Value::SubType::INTEGER);
-    return val.node_->integer.val_;
+    assert(val_subtype(val) == detail::SubType::INTEGER);
+    return val_node(val)->integer.val_;
   }
 
   inline Value comp_fn(Value val) {
-    assert(val_subtype(val) == Value::SubType::COMPOSITE);
-    return Value(val.node_->composite.fn_);
+    assert(val_subtype(val) == detail::SubType::COMPOSITE);
+    return value(val_node(val)->composite.fn_);
   }
 
   inline Value comp_arg(Value val) {
-    assert(val_subtype(val) == Value::SubType::COMPOSITE);
-    return Value(val.node_->composite.arg_);
+    assert(val_subtype(val) == detail::SubType::COMPOSITE);
+    return value(val_node(val)->composite.arg_);
   }
 }}
 // }}}
