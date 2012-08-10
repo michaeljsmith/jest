@@ -169,6 +169,10 @@ namespace utils {namespace strings {
   struct String : public std::string {
     String(std::string s): std::string(s) {}
   };
+
+  String str(std::string s) {
+    return String(s);
+  }
 }}
 // }}}
 
@@ -308,55 +312,109 @@ namespace model {namespace expressions {
 }}
 // }}}
 
-// {{{ model::expressions::Value
-namespace model {namespace expressions {
+// {{{ model::values::Value
+namespace model {namespace values {
   class Value {
     typedef utils::strings::String String;
-    typedef utils::trees::Tree<String> StringTree;
 
-    Value(StringTree tree): tree(tree) {}
+  public:
+    enum class SubType {
+      COMPOSITE,
+      SYMBOL,
+      INTEGER
+    };
 
-    StringTree tree;
+  private:
+    struct Node;
 
-    friend Value sym(String string);
-    friend bool symp(Value tp);
-    friend String sym_string(Value symbol);
-    friend Value comp(Value val_fn, Value val_arg);
-    friend Value comp_fn(Value tp);
-    friend Value comp_arg(Value tp);
+    struct Composite {
+      Composite(Node const* fn, Node const* arg)
+        : fn(fn), arg(arg) {}
+      Node const* const fn;
+      Node const* const arg;
+    };
+
+    struct Symbol {
+      explicit Symbol(String val): val(val) {}
+      String const val;
+    };
+
+    struct Integer {
+      explicit Integer(int val): val(val) {}
+      int const val;
+    };
+
+    struct Node {
+      Node(Composite composite): subtype(SubType::COMPOSITE) {
+        new (&this->composite) Composite(composite);
+      }
+
+      Node(Symbol symbol): subtype(SubType::SYMBOL) {
+        new (&this->symbol) Symbol(symbol);
+      }
+
+      Node(Integer integer): subtype(SubType::INTEGER) {
+        new (&this->integer) Integer(integer);
+      }
+
+      SubType subtype;
+      union {
+        Composite composite;
+        Symbol symbol;
+        Integer integer;
+      };
+    };
+
+    explicit Value(Node const* node): node(node) {
+      ASSERT(node != nullptr);
+    }
+
+    Node const* const node;
+
+    friend Value::SubType val_subtype(Value val);
+    friend Value composite(Value left, Value right);
+    friend Value symbol(String val);
+    friend Value integer(int val);
+    friend String symbol_val(Value val);
+    friend int integer_val(Value val);
+    friend Value comp_fn(Value val);
+    friend Value comp_arg(Value val);
   };
 
-  inline Value sym(Value::String string) {
-    using namespace utils::trees;
-    return Value(leaf(string));
+  inline Value::SubType val_subtype(Value val) {
+    return val.node->subtype;
   }
 
-  inline bool symp(Value val) {
-    return leafp(val.tree);
+  inline Value composite(Value fn, Value arg) {
+    return Value(new Value::Node(Value::Composite(fn.node, arg.node)));
   }
 
-  inline Value::String sym_string(Value name) {
-    ASSERT(symp(name));
-    return leaf_val(name.tree);
+  inline Value symbol(Value::String val) {
+    return Value(new Value::Node(Value::Symbol(val)));
   }
 
-  inline Value comp(Value type_fn, Value type_arg) {
-    using namespace utils::trees;
-    return Value(branch(type_fn.tree, type_arg.tree));
+  inline Value integer(int val) {
+    return Value(new Value::Node(Value::Integer(val)));
   }
 
-  inline bool compp(Value val) {
-    return !symp(val);
+  inline Value::String symbol_val(Value val) {
+    ASSERT(val_subtype(val) == Value::SubType::SYMBOL);
+    return val.node->symbol.val;
+  }
+
+  inline int integer_val(Value val) {
+    ASSERT(val_subtype(val) == Value::SubType::INTEGER);
+    return val.node->integer.val;
   }
 
   inline Value comp_fn(Value val) {
-    ASSERT(compp(val));
-    return left(val.tree);
+    ASSERT(val_subtype(val) == Value::SubType::COMPOSITE);
+    return Value(val.node->composite.fn);
   }
 
   inline Value comp_arg(Value val) {
-    ASSERT(compp(val));
-    return right(val.tree);
+    ASSERT(val_subtype(val) == Value::SubType::COMPOSITE);
+    return Value(val.node->composite.arg);
   }
 }}
 // }}}
@@ -421,12 +479,26 @@ void test_trees() {
   ASSERT(2 == leaf_val(left(branch(leaf(2), leaf(3)))));
   ASSERT(3 == leaf_val(right(branch(leaf(2), leaf(3)))));
 }
+
+void test_values() {
+  using namespace utils::strings;
+  using namespace model::values;
+
+  ASSERT(val_subtype(integer(3)) == Value::SubType::INTEGER);
+  ASSERT(integer_val(integer(3)) == 3);
+  ASSERT(val_subtype(symbol(str("foo"))) == Value::SubType::SYMBOL);
+  ASSERT(symbol_val(symbol(str("foo"))) == "foo");
+  ASSERT(val_subtype(composite(integer(2), integer(3))) == Value::SubType::COMPOSITE);
+  ASSERT(integer_val(comp_fn(composite(integer(2), integer(3)))) == 2);
+  ASSERT(symbol_val(comp_arg(composite(integer(2), symbol(str("bar"))))) == "bar");
+}
 // }}}
 
 // {{{ Main
 int main() {
   test_lists();
   test_trees();
+  test_values();
 
   model::functions::Function* fn;
   return 0;
