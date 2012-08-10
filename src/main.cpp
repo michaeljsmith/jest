@@ -164,10 +164,10 @@ namespace utils {namespace trees {
 }}
 // }}}
 
-// {{{ model::symbols::Symbol
-namespace model {namespace symbols {
-  struct Symbol : public std::string {
-    Symbol(std::string s): std::string(s) {}
+// {{{ utils::strings::String
+namespace utils {namespace strings {
+  struct String : public std::string {
+    String(std::string s): std::string(s) {}
   };
 }}
 // }}}
@@ -175,22 +175,22 @@ namespace model {namespace symbols {
 // {{{ model::types::Type
 namespace model {namespace types {
   class Type {
-    typedef model::symbols::Symbol Symbol;
-    typedef utils::trees::Tree<Symbol> SymbolTree;
+    typedef utils::strings::String String;
+    typedef utils::trees::Tree<String> StringTree;
 
-    Type(SymbolTree tree): tree(tree) {}
+    Type(StringTree tree): tree(tree) {}
 
-    SymbolTree tree;
+    StringTree tree;
 
-    friend Type name(Symbol name);
+    friend Type name(String name);
     friend bool namep(Type tp);
-    friend Symbol name_symbol(Type name);
+    friend String name_string(Type name);
     friend Type dependent(Type type_fn, Type type_arg);
     friend Type dependent_fn(Type tp);
     friend Type dependent_arg(Type tp);
   };
 
-  inline Type name(Type::Symbol name) {
+  inline Type name(Type::String name) {
     using namespace utils::trees;
     return Type(leaf(name));
   }
@@ -199,7 +199,7 @@ namespace model {namespace types {
     return leafp(tp.tree);
   }
 
-  inline Type::Symbol name_symbol(Type name) {
+  inline Type::String name_string(Type name) {
     ASSERT(namep(name));
     return leaf_val(name.tree);
   }
@@ -228,24 +228,24 @@ namespace model {namespace types {
 // {{{ model::parameters::Parameter
 namespace model {namespace parameters {
   class Parameter {
-    typedef model::symbols::Symbol Symbol;
+    typedef utils::strings::String String;
     typedef model::types::Type Type;
 
-    Parameter(Symbol name, Type type): name(name), type(type) {}
+    Parameter(String name, Type type): name(name), type(type) {}
 
-    Symbol const name;
+    String const name;
     Type const type;
 
-    friend Parameter parameter(Symbol name, Type type);
-    friend Symbol parameter_name(Parameter parameter);
+    friend Parameter parameter(String name, Type type);
+    friend String parameter_name(Parameter parameter);
     friend Type parameter_type(Parameter parameter);
   };
 
-  inline Parameter parameter(Parameter::Symbol name, Parameter::Type type) {
+  inline Parameter parameter(Parameter::String name, Parameter::Type type) {
     return Parameter(name, type);
   }
 
-  inline Parameter::Symbol parameter_name(Parameter parameter) {
+  inline Parameter::String parameter_name(Parameter parameter) {
     return parameter.name;
   }
 
@@ -258,22 +258,22 @@ namespace model {namespace parameters {
 // {{{ model::expressions::Expression
 namespace model {namespace expressions {
   class Expression {
-    typedef model::symbols::Symbol Symbol;
-    typedef utils::trees::Tree<Symbol> SymbolTree;
+    typedef utils::strings::String String;
+    typedef utils::trees::Tree<String> StringTree;
 
-    Expression(SymbolTree tree): tree(tree) {}
+    Expression(StringTree tree): tree(tree) {}
 
-    SymbolTree tree;
+    StringTree tree;
 
-    friend Expression ref(Symbol name);
+    friend Expression ref(String name);
     friend bool refp(Expression tp);
-    friend Symbol ref_symbol(Expression name);
+    friend String ref_ident(Expression name);
     friend Expression form(Expression type_fn, Expression type_arg);
     friend Expression form_fn(Expression tp);
     friend Expression form_arg(Expression tp);
   };
 
-  inline Expression ref(Expression::Symbol name) {
+  inline Expression ref(Expression::String name) {
     using namespace utils::trees;
     return Expression(leaf(name));
   }
@@ -282,7 +282,7 @@ namespace model {namespace expressions {
     return leafp(tp.tree);
   }
 
-  inline Expression::Symbol ref_symbol(Expression name) {
+  inline Expression::String ref_ident(Expression name) {
     ASSERT(refp(name));
     return leaf_val(name.tree);
   }
@@ -304,6 +304,59 @@ namespace model {namespace expressions {
   inline Expression form_arg(Expression tp) {
     ASSERT(formp(tp));
     return right(tp.tree);
+  }
+}}
+// }}}
+
+// {{{ model::expressions::Value
+namespace model {namespace expressions {
+  class Value {
+    typedef utils::strings::String String;
+    typedef utils::trees::Tree<String> StringTree;
+
+    Value(StringTree tree): tree(tree) {}
+
+    StringTree tree;
+
+    friend Value sym(String string);
+    friend bool symp(Value tp);
+    friend String sym_string(Value symbol);
+    friend Value comp(Value val_fn, Value val_arg);
+    friend Value comp_fn(Value tp);
+    friend Value comp_arg(Value tp);
+  };
+
+  inline Value sym(Value::String string) {
+    using namespace utils::trees;
+    return Value(leaf(string));
+  }
+
+  inline bool symp(Value val) {
+    return leafp(val.tree);
+  }
+
+  inline Value::String sym_string(Value name) {
+    ASSERT(symp(name));
+    return leaf_val(name.tree);
+  }
+
+  inline Value comp(Value type_fn, Value type_arg) {
+    using namespace utils::trees;
+    return Value(branch(type_fn.tree, type_arg.tree));
+  }
+
+  inline bool compp(Value val) {
+    return !symp(val);
+  }
+
+  inline Value comp_fn(Value val) {
+    ASSERT(compp(val));
+    return left(val.tree);
+  }
+
+  inline Value comp_arg(Value val) {
+    ASSERT(compp(val));
+    return right(val.tree);
   }
 }}
 // }}}
