@@ -506,6 +506,38 @@ namespace model {namespace frames {
 }}
 // }}}
 
+// {{{ model::closures::Closure
+namespace model {namespace closures {
+  class Closure {
+    typedef frames::Frame Frame;
+    template <typename T> using List = utils::lists::List<T>;
+    typedef List<Frame> FrameList;
+    typedef model::functions::Function Function;
+
+    Closure(Function fn, FrameList frames): fn_(fn), frames_(frames) {}
+
+    Function fn_;
+    FrameList frames_;
+
+    friend Closure closure(Function fn, FrameList frames);
+    friend Function closure_function(Closure clos);
+    friend FrameList closure_frames(Closure clos);
+  };
+
+  inline Closure closure(Closure::Function fn, Closure::FrameList frames) {
+    return Closure(fn, frames);
+  }
+
+  inline Closure::Function closure_function(Closure clos) {
+    return clos.fn_;
+  }
+
+  inline Closure::FrameList closure_frames(Closure clos) {
+    return clos.frames_;
+  }
+}}
+// }}}
+
 // {{{ model::values::Value
 namespace model {namespace values {
   namespace detail {
