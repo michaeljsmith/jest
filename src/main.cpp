@@ -370,51 +370,106 @@ namespace model {namespace values {
 namespace model {namespace expressions {
   class Expression {
     typedef utils::strings::String String;
-    typedef utils::trees::Tree<String> StringTree;
+    typedef model::values::Value Value;
 
-    Expression(StringTree tree): tree(tree) {}
+  public:
+    enum class SubType {
+      FORM,
+      CONSTANT,
+      REFERENCE
+    };
 
-    StringTree tree;
+  private:
+    struct Node;
 
-    friend Expression ref(String name);
-    friend bool refp(Expression tp);
-    friend String ref_ident(Expression name);
-    friend Expression form(Expression type_fn, Expression type_arg);
-    friend Expression form_fn(Expression tp);
-    friend Expression form_arg(Expression tp);
+    struct Form {
+      Form(Node const* fn, Node const* arg)
+        : fn(fn), arg(arg) {}
+      Node const* const fn;
+      Node const* const arg;
+    };
+
+    struct Constant {
+      explicit Constant(Value val): val(val) {}
+      Value const val;
+    };
+
+    struct Reference {
+      explicit Reference(String ident): ident(ident) {}
+      String const ident;
+    };
+
+    struct Node {
+      Node(Form form): subtype(SubType::FORM) {
+        new (&this->form) Form(form);
+      }
+
+      Node(Constant constant): subtype(SubType::CONSTANT) {
+        new (&this->constant) Constant(constant);
+      }
+
+      Node(Reference reference): subtype(SubType::REFERENCE) {
+        new (&this->reference) Reference(reference);
+      }
+
+      SubType subtype;
+      union {
+        Form form;
+        Constant constant;
+        Reference reference;
+      };
+    };
+
+    explicit Expression(Node const* node): node(node) {
+      ASSERT(node != nullptr);
+    }
+
+    Node const* const node;
+
+    friend Expression::SubType expr_subtype(Expression expr);
+    friend Expression form(Expression fn, Expression arg);
+    friend Expression constant(Value val);
+    friend Expression reference(String ident);
+    friend Value constant_val(Expression expr);
+    friend String reference_ident(Expression expr);
+    friend Expression form_fn(Expression expr);
+    friend Expression form_arg(Expression expr);
   };
 
-  inline Expression ref(Expression::String name) {
-    using namespace utils::trees;
-    return Expression(leaf(name));
+  inline Expression::SubType expr_subtype(Expression expr) {
+    return expr.node->subtype;
   }
 
-  inline bool refp(Expression tp) {
-    return leafp(tp.tree);
+  inline Expression form(Expression fn, Expression arg) {
+    return Expression(new Expression::Node(Expression::Form(fn.node, arg.node)));
   }
 
-  inline Expression::String ref_ident(Expression name) {
-    ASSERT(refp(name));
-    return leaf_val(name.tree);
+  inline Expression constant(Expression::Value value) {
+    return Expression(new Expression::Node(Expression::Constant(value)));
   }
 
-  inline Expression form(Expression type_fn, Expression type_arg) {
-    using namespace utils::trees;
-    return Expression(branch(type_fn.tree, type_arg.tree));
+  inline Expression reference(Expression::String ident) {
+    return Expression(new Expression::Node(Expression::Reference(ident)));
   }
 
-  inline bool formp(Expression tp) {
-    return !refp(tp);
+  inline Expression::Value constant_val(Expression expr) {
+    ASSERT(expr_subtype(expr) == Expression::SubType::CONSTANT);
+    return expr.node->constant.val;
   }
 
-  inline Expression form_fn(Expression tp) {
-    ASSERT(formp(tp));
-    return left(tp.tree);
+  inline Expression::String reference_ident(Expression expr) {
+    ASSERT(expr_subtype(expr) == Expression::SubType::REFERENCE);
+    return expr.node->reference.ident;
   }
 
-  inline Expression form_arg(Expression tp) {
-    ASSERT(formp(tp));
-    return right(tp.tree);
+  inline Expression form_fn(Expression expr) {
+    ASSERT(expr_subtype(expr) == Expression::SubType::FORM);
+    return Expression(expr.node->form.fn);
+  }
+
+  inline Expression form_arg(Expression expr) {
+    ASSERT(expr_subtype(expr) == Expression::SubType::FORM);
+    return Expression(expr.node->form.arg);
   }
 }}
 // }}}
