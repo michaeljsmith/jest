@@ -35,7 +35,7 @@
 # TODO: Handle includes outside of tree.
 ##############################################################################
 
-CXXFLAGS=--std=c++11
+CXXFLAGS=--std=c++11 -Werror -Weverything -pedantic -Wno-c++98-compat -Wno-padded
 
 # Basic configuration variables.
 config=out

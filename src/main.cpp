@@ -1,37 +1,16 @@
-// {{{ Prelude
 #include <string>
-#include <stdio.h>
-#include <boost/variant.hpp>
-#include <boost/none.hpp>
-#include <tr1/tuple>
-
-struct AssertRaiser {
-  AssertRaiser(bool condition, char const* file, int line, char const* msg) {
-    if (!condition) {
-      fprintf(stderr, "%s(%d): Assertion failed: %s\n", file, line, msg);
-      exit(1);
-    }
-  }
-};
-
-#define STRINGIZE_DETAIL(x) #x
-#define STRINGIZE(x) STRINGIZE_DETAIL(x)
-#define ASSERT_OBJ_NAME_DETAIL(a, b) a##b
-#define ASSERT_OBJ_NAME(a, b) ASSERT_OBJ_NAME_DETAIL(a, b)
-#define ASSERT(x) AssertRaiser ASSERT_OBJ_NAME(assertObj, __LINE__) \
-  ((x), __FILE__, __LINE__, #x);
-// }}}
+#include <cassert>
 
 // {{{ utils::lists::List
 namespace utils {namespace lists {
   template <typename T> class List {
     struct Node {
-      Node(T head, Node const* tail): head(head), tail(tail) {}
-      T const head;
-      Node const* const tail;
+      Node(T head, Node const* tail): head_(head), tail_(tail) {}
+      T const head_;
+      Node const* const tail_;
     };
 
-    Node const* const node;
+    Node const* const node_;
 
     template <typename U> friend List<U> nil();
     template <typename U> friend bool nilp(List<U> l);
@@ -40,11 +19,11 @@ namespace utils {namespace lists {
     template <typename U> friend U car(List<U> l);
     template <typename U> friend List<U> cdr(List<U> l);
 
-    explicit List(Node const* node): node(node) {}
+    explicit List(Node const* node): node_(node) {}
   };
 
   template <typename T> bool nilp(List<T> l) {
-    return l.node == nullptr;
+    return l.node_ == nullptr;
   }
 
   template <typename T> List<T> nil() {
@@ -52,22 +31,22 @@ namespace utils {namespace lists {
   }
 
   template <typename T> bool consp(List<T> l) {
-    return l.node != nullptr;
+    return l.node_ != nullptr;
   }
 
   template <typename T> List<T> cons(T head, List<T> tail) {
     typedef typename List<T>::Node Node;
-    return List<T>(new Node(head, tail.node));
+    return List<T>(new Node(head, tail.node_));
   }
 
   template <typename T> T car(List<T> l) {
-    ASSERT(!nilp(l));
-    return l.node->head;
+    assert(!nilp(l));
+    return l.node_->head_;
   }
 
   template <typename T> List<T> cdr(List<T> l) {
-    ASSERT(!nilp(l));
-    return List<T>(l.node->tail);
+    assert(!nilp(l));
+    return List<T>(l.node_->tail_);
   }
 }}
 // }}}
@@ -86,15 +65,15 @@ namespace utils {namespace trees {
     struct Node;
 
     struct Leaf {
-      explicit Leaf(T val): val(val) {}
-      T const val;
+      explicit Leaf(T val): val_(val) {}
+      T const val_;
     };
 
     struct Branch {
       Branch(Node const* left, Node const* right)
-        : left(left), right(right) {}
-      Node const* const left;
-      Node const* const right;
+        : left_(left), right_(right) {}
+      Node const* const left_;
+      Node const* const right_;
     };
 
     struct Node {
@@ -113,11 +92,11 @@ namespace utils {namespace trees {
       };
     };
 
-    explicit Tree(Node const* node): node(node) {
-      ASSERT(node != nullptr);
+    explicit Tree(Node const* node): node_(node) {
+      assert(node != nullptr);
     }
 
-    Node const* const node;
+    Node const* const node_;
 
     template <typename U> friend Tree<U> leaf(U val);
     template <typename U> friend Tree<U> branch(Tree<U> left, Tree<U> right);
@@ -136,16 +115,16 @@ namespace utils {namespace trees {
   template <typename T> Tree<T> branch(Tree<T> left, Tree<T> right) {
     typedef typename Tree<T>::Branch Branch;
     typedef typename Tree<T>::Node Node;
-    return Tree<T>(new Node(Branch(left.node, right.node)));
+    return Tree<T>(new Node(Branch(left.node_, right.node_)));
   }
 
   template <typename T> bool leafp(Tree<T> t) {
-    return t.node->type == detail::Type::LEAF;
+    return t.node_->type == detail::Type::LEAF;
   }
 
   template <typename T> T leaf_val(Tree<T> t) {
-    ASSERT(leafp(t));
-    return t.node->leaf.val;
+    assert(leafp(t));
+    return t.node_->leaf.val_;
   }
 
   template <typename T> bool branchp(Tree<T> t) {
@@ -153,13 +132,13 @@ namespace utils {namespace trees {
   }
 
   template <typename T> Tree<T> left(Tree<T> t) {
-    ASSERT(branchp(t));
-    return Tree<T>(t.node->branch.left);
+    assert(branchp(t));
+    return Tree<T>(t.node_->branch.left_);
   }
 
   template <typename T> Tree<T> right(Tree<T> t) {
-    ASSERT(branchp(t));
-    return Tree<T>(t.node->branch.right);
+    assert(branchp(t));
+    return Tree<T>(t.node_->branch.right_);
   }
 }}
 // }}}
@@ -170,7 +149,7 @@ namespace utils {namespace strings {
     String(std::string s): std::string(s) {}
   };
 
-  String str(std::string s) {
+  inline String str(std::string s) {
     return String(s);
   }
 }}
@@ -182,9 +161,9 @@ namespace model {namespace types {
     typedef utils::strings::String String;
     typedef utils::trees::Tree<String> StringTree;
 
-    Type(StringTree tree): tree(tree) {}
+    Type(StringTree tree): tree_(tree) {}
 
-    StringTree tree;
+    StringTree tree_;
 
     friend Type name(String name);
     friend bool namep(Type tp);
@@ -200,17 +179,17 @@ namespace model {namespace types {
   }
 
   inline bool namep(Type tp) {
-    return leafp(tp.tree);
+    return leafp(tp.tree_);
   }
 
   inline Type::String name_string(Type name) {
-    ASSERT(namep(name));
-    return leaf_val(name.tree);
+    assert(namep(name));
+    return leaf_val(name.tree_);
   }
 
   inline Type dependent(Type type_fn, Type type_arg) {
     using namespace utils::trees;
-    return Type(branch(type_fn.tree, type_arg.tree));
+    return Type(branch(type_fn.tree_, type_arg.tree_));
   }
 
   inline bool dependentp(Type tp) {
@@ -218,13 +197,13 @@ namespace model {namespace types {
   }
 
   inline Type dependent_fn(Type tp) {
-    ASSERT(dependentp(tp));
-    return left(tp.tree);
+    assert(dependentp(tp));
+    return left(tp.tree_);
   }
 
   inline Type dependent_arg(Type tp) {
-    ASSERT(dependentp(tp));
-    return right(tp.tree);
+    assert(dependentp(tp));
+    return right(tp.tree_);
   }
 }}
 // }}}
@@ -235,10 +214,10 @@ namespace model {namespace parameters {
     typedef utils::strings::String String;
     typedef model::types::Type Type;
 
-    Parameter(String name, Type type): name(name), type(type) {}
+    Parameter(String name, Type type): name_(name), type_(type) {}
 
-    String const name;
-    Type const type;
+    String const name_;
+    Type const type_;
 
     friend Parameter parameter(String name, Type type);
     friend String parameter_name(Parameter parameter);
@@ -250,11 +229,11 @@ namespace model {namespace parameters {
   }
 
   inline Parameter::String parameter_name(Parameter parameter) {
-    return parameter.name;
+    return parameter.name_;
   }
 
   inline Parameter::Type parameter_type(Parameter parameter) {
-    return parameter.type;
+    return parameter.type_;
   }
 }}
 // }}}
@@ -276,19 +255,19 @@ namespace model {namespace values {
 
     struct Composite {
       Composite(Node const* fn, Node const* arg)
-        : fn(fn), arg(arg) {}
-      Node const* const fn;
-      Node const* const arg;
+        : fn_(fn), arg_(arg) {}
+      Node const* const fn_;
+      Node const* const arg_;
     };
 
     struct Symbol {
-      explicit Symbol(String val): val(val) {}
-      String const val;
+      explicit Symbol(String val): val_(val) {}
+      String const val_;
     };
 
     struct Integer {
-      explicit Integer(int val): val(val) {}
-      int const val;
+      explicit Integer(int val): val_(val) {}
+      int const val_;
     };
 
     struct Node {
@@ -312,11 +291,11 @@ namespace model {namespace values {
       };
     };
 
-    explicit Value(Node const* node): node(node) {
-      ASSERT(node != nullptr);
+    explicit Value(Node const* node): node_(node) {
+      assert(node != nullptr);
     }
 
-    Node const* const node;
+    Node const* const node_;
 
     friend Value::SubType val_subtype(Value val);
     friend Value composite(Value left, Value right);
@@ -329,11 +308,11 @@ namespace model {namespace values {
   };
 
   inline Value::SubType val_subtype(Value val) {
-    return val.node->subtype;
+    return val.node_->subtype;
   }
 
   inline Value composite(Value fn, Value arg) {
-    return Value(new Value::Node(Value::Composite(fn.node, arg.node)));
+    return Value(new Value::Node(Value::Composite(fn.node_, arg.node_)));
   }
 
   inline Value symbol(Value::String val) {
@@ -345,23 +324,23 @@ namespace model {namespace values {
   }
 
   inline Value::String symbol_val(Value val) {
-    ASSERT(val_subtype(val) == Value::SubType::SYMBOL);
-    return val.node->symbol.val;
+    assert(val_subtype(val) == Value::SubType::SYMBOL);
+    return val.node_->symbol.val_;
   }
 
   inline int integer_val(Value val) {
-    ASSERT(val_subtype(val) == Value::SubType::INTEGER);
-    return val.node->integer.val;
+    assert(val_subtype(val) == Value::SubType::INTEGER);
+    return val.node_->integer.val_;
   }
 
   inline Value comp_fn(Value val) {
-    ASSERT(val_subtype(val) == Value::SubType::COMPOSITE);
-    return Value(val.node->composite.fn);
+    assert(val_subtype(val) == Value::SubType::COMPOSITE);
+    return Value(val.node_->composite.fn_);
   }
 
   inline Value comp_arg(Value val) {
-    ASSERT(val_subtype(val) == Value::SubType::COMPOSITE);
-    return Value(val.node->composite.arg);
+    assert(val_subtype(val) == Value::SubType::COMPOSITE);
+    return Value(val.node_->composite.arg_);
   }
 }}
 // }}}
@@ -384,19 +363,19 @@ namespace model {namespace expressions {
 
     struct Form {
       Form(Node const* fn, Node const* arg)
-        : fn(fn), arg(arg) {}
-      Node const* const fn;
-      Node const* const arg;
+        : fn_(fn), arg_(arg) {}
+      Node const* const fn_;
+      Node const* const arg_;
     };
 
     struct Constant {
-      explicit Constant(Value val): val(val) {}
-      Value const val;
+      explicit Constant(Value val): val_(val) {}
+      Value const val_;
     };
 
     struct Reference {
-      explicit Reference(String ident): ident(ident) {}
-      String const ident;
+      explicit Reference(String ident): ident_(ident) {}
+      String const ident_;
     };
 
     struct Node {
@@ -420,11 +399,11 @@ namespace model {namespace expressions {
       };
     };
 
-    explicit Expression(Node const* node): node(node) {
-      ASSERT(node != nullptr);
+    explicit Expression(Node const* node): node_(node) {
+      assert(node != nullptr);
     }
 
-    Node const* const node;
+    Node const* const node_;
 
     friend Expression::SubType expr_subtype(Expression expr);
     friend Expression form(Expression fn, Expression arg);
@@ -437,11 +416,11 @@ namespace model {namespace expressions {
   };
 
   inline Expression::SubType expr_subtype(Expression expr) {
-    return expr.node->subtype;
+    return expr.node_->subtype;
   }
 
   inline Expression form(Expression fn, Expression arg) {
-    return Expression(new Expression::Node(Expression::Form(fn.node, arg.node)));
+    return Expression(new Expression::Node(Expression::Form(fn.node_, arg.node_)));
   }
 
   inline Expression constant(Expression::Value value) {
@@ -453,23 +432,23 @@ namespace model {namespace expressions {
   }
 
   inline Expression::Value constant_val(Expression expr) {
-    ASSERT(expr_subtype(expr) == Expression::SubType::CONSTANT);
-    return expr.node->constant.val;
+    assert(expr_subtype(expr) == Expression::SubType::CONSTANT);
+    return expr.node_->constant.val_;
   }
 
   inline Expression::String reference_ident(Expression expr) {
-    ASSERT(expr_subtype(expr) == Expression::SubType::REFERENCE);
-    return expr.node->reference.ident;
+    assert(expr_subtype(expr) == Expression::SubType::REFERENCE);
+    return expr.node_->reference.ident_;
   }
 
   inline Expression form_fn(Expression expr) {
-    ASSERT(expr_subtype(expr) == Expression::SubType::FORM);
-    return Expression(expr.node->form.fn);
+    assert(expr_subtype(expr) == Expression::SubType::FORM);
+    return Expression(expr.node_->form.fn_);
   }
 
   inline Expression form_arg(Expression expr) {
-    ASSERT(expr_subtype(expr) == Expression::SubType::FORM);
-    return Expression(expr.node->form.arg);
+    assert(expr_subtype(expr) == Expression::SubType::FORM);
+    return Expression(expr.node_->form.arg_);
   }
 }}
 // }}}
@@ -484,11 +463,11 @@ namespace model {namespace functions {
     typedef List<Parameter const> ParameterList;
 
     Function(Type type, ParameterList params, Expression expr):
-      type(type), params(params), expr(expr) {}
+      type_(type), params_(params), expr_(expr) {}
 
-    Type const type;
-    ParameterList const params;
-    Expression const expr;
+    Type const type_;
+    ParameterList const params_;
+    Expression const expr_;
 
     friend Function fun(Type type, ParameterList params, Expression expr);
     friend Type fun_type(Function fn);
@@ -502,50 +481,50 @@ namespace model {namespace functions {
   }
 
   Function::Type fun_type(Function fn) {
-    return fn.type;
+    return fn.type_;
   }
 
   Function::ParameterList fun_params(Function fn) {
-    return fn.params;
+    return fn.params_;
   }
 
   Function::Expression fun_expr(Function fn) {
-    return fn.expr;
+    return fn.expr_;
   }
 }}
 // }}}
 
 // {{{ Testing
-void test_lists() {
+inline void test_lists() {
   using namespace utils::lists;
 
-  ASSERT(nilp(nil<int>()));
-  ASSERT(consp(cons(2, nil<int>())));
-  ASSERT(2 == car(cons(2, nil<int>())));
-  ASSERT(3 == car(cdr(cons(2, cons(3, nil<int>())))));
+  assert(nilp(nil<int>()));
+  assert(consp(cons(2, nil<int>())));
+  assert(2 == car(cons(2, nil<int>())));
+  assert(3 == car(cdr(cons(2, cons(3, nil<int>())))));
 }
 
-void test_trees() {
+inline void test_trees() {
   using namespace utils::trees;
 
-  ASSERT(3 == leaf_val(leaf(3)));
-  ASSERT(leafp(leaf(3)));
-  ASSERT(branchp(branch(leaf(2), leaf(3))));
-  ASSERT(2 == leaf_val(left(branch(leaf(2), leaf(3)))));
-  ASSERT(3 == leaf_val(right(branch(leaf(2), leaf(3)))));
+  assert(3 == leaf_val(leaf(3)));
+  assert(leafp(leaf(3)));
+  assert(branchp(branch(leaf(2), leaf(3))));
+  assert(2 == leaf_val(left(branch(leaf(2), leaf(3)))));
+  assert(3 == leaf_val(right(branch(leaf(2), leaf(3)))));
 }
 
-void test_values() {
+inline void test_values() {
   using namespace utils::strings;
   using namespace model::values;
 
-  ASSERT(val_subtype(integer(3)) == Value::SubType::INTEGER);
-  ASSERT(integer_val(integer(3)) == 3);
-  ASSERT(val_subtype(symbol(str("foo"))) == Value::SubType::SYMBOL);
-  ASSERT(symbol_val(symbol(str("foo"))) == "foo");
-  ASSERT(val_subtype(composite(integer(2), integer(3))) == Value::SubType::COMPOSITE);
-  ASSERT(integer_val(comp_fn(composite(integer(2), integer(3)))) == 2);
-  ASSERT(symbol_val(comp_arg(composite(integer(2), symbol(str("bar"))))) == "bar");
+  assert(val_subtype(integer(3)) == Value::SubType::INTEGER);
+  assert(integer_val(integer(3)) == 3);
+  assert(val_subtype(symbol(str("foo"))) == Value::SubType::SYMBOL);
+  assert(symbol_val(symbol(str("foo"))) == "foo");
+  assert(val_subtype(composite(integer(2), integer(3))) == Value::SubType::COMPOSITE);
+  assert(integer_val(comp_fn(composite(integer(2), integer(3)))) == 2);
+  assert(symbol_val(comp_arg(composite(integer(2), symbol(str("bar"))))) == "bar");
 }
 // }}}
 
@@ -555,7 +534,6 @@ int main() {
   test_trees();
   test_values();
 
-  model::functions::Function* fn;
   return 0;
 }
 // }}}
