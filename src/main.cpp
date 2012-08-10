@@ -481,6 +481,31 @@ namespace model {namespace bindings {
 }}
 // }}}
 
+// {{{ model::frames::Frame
+namespace model {namespace frames {
+  class Frame {
+    typedef bindings::Binding Binding;
+    template <typename T> using List = utils::lists::List<T>;
+    typedef List<Binding> BindingList;
+
+    Frame(BindingList bindings): bindings_(bindings) {}
+
+    BindingList bindings_;
+
+    friend Frame frame(BindingList bindings);
+    friend BindingList frame_bindings(Frame frm);
+  };
+
+  inline Frame frame(Frame::BindingList bindings) {
+    return Frame(bindings);
+  }
+
+  inline Frame::BindingList frame_bindings(Frame frm) {
+    return frm.bindings_;
+  }
+}}
+// }}}
+
 // {{{ model::values::Value
 namespace model {namespace values {
   namespace detail {
