@@ -259,59 +259,6 @@ namespace model {namespace parameters {
 }}
 // }}}
 
-// {{{ model::expressions::Expression
-namespace model {namespace expressions {
-  class Expression {
-    typedef utils::strings::String String;
-    typedef utils::trees::Tree<String> StringTree;
-
-    Expression(StringTree tree): tree(tree) {}
-
-    StringTree tree;
-
-    friend Expression ref(String name);
-    friend bool refp(Expression tp);
-    friend String ref_ident(Expression name);
-    friend Expression form(Expression type_fn, Expression type_arg);
-    friend Expression form_fn(Expression tp);
-    friend Expression form_arg(Expression tp);
-  };
-
-  inline Expression ref(Expression::String name) {
-    using namespace utils::trees;
-    return Expression(leaf(name));
-  }
-
-  inline bool refp(Expression tp) {
-    return leafp(tp.tree);
-  }
-
-  inline Expression::String ref_ident(Expression name) {
-    ASSERT(refp(name));
-    return leaf_val(name.tree);
-  }
-
-  inline Expression form(Expression type_fn, Expression type_arg) {
-    using namespace utils::trees;
-    return Expression(branch(type_fn.tree, type_arg.tree));
-  }
-
-  inline bool formp(Expression tp) {
-    return !refp(tp);
-  }
-
-  inline Expression form_fn(Expression tp) {
-    ASSERT(formp(tp));
-    return left(tp.tree);
-  }
-
-  inline Expression form_arg(Expression tp) {
-    ASSERT(formp(tp));
-    return right(tp.tree);
-  }
-}}
-// }}}
-
 // {{{ model::values::Value
 namespace model {namespace values {
   class Value {
@@ -415,6 +362,59 @@ namespace model {namespace values {
   inline Value comp_arg(Value val) {
     ASSERT(val_subtype(val) == Value::SubType::COMPOSITE);
     return Value(val.node->composite.arg);
+  }
+}}
+// }}}
+
+// {{{ model::expressions::Expression
+namespace model {namespace expressions {
+  class Expression {
+    typedef utils::strings::String String;
+    typedef utils::trees::Tree<String> StringTree;
+
+    Expression(StringTree tree): tree(tree) {}
+
+    StringTree tree;
+
+    friend Expression ref(String name);
+    friend bool refp(Expression tp);
+    friend String ref_ident(Expression name);
+    friend Expression form(Expression type_fn, Expression type_arg);
+    friend Expression form_fn(Expression tp);
+    friend Expression form_arg(Expression tp);
+  };
+
+  inline Expression ref(Expression::String name) {
+    using namespace utils::trees;
+    return Expression(leaf(name));
+  }
+
+  inline bool refp(Expression tp) {
+    return leafp(tp.tree);
+  }
+
+  inline Expression::String ref_ident(Expression name) {
+    ASSERT(refp(name));
+    return leaf_val(name.tree);
+  }
+
+  inline Expression form(Expression type_fn, Expression type_arg) {
+    using namespace utils::trees;
+    return Expression(branch(type_fn.tree, type_arg.tree));
+  }
+
+  inline bool formp(Expression tp) {
+    return !refp(tp);
+  }
+
+  inline Expression form_fn(Expression tp) {
+    ASSERT(formp(tp));
+    return left(tp.tree);
+  }
+
+  inline Expression form_arg(Expression tp) {
+    ASSERT(formp(tp));
+    return right(tp.tree);
   }
 }}
 // }}}
