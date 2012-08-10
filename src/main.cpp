@@ -238,6 +238,176 @@ namespace model {namespace parameters {
 }}
 // }}}
 
+// {{{ model::expressions::Expression
+namespace model {namespace expressions {
+  class Expression {
+    typedef utils::strings::String String;
+
+  public:
+    enum class SubType {
+      FORM,
+      REFERENCE,
+      SYMBOL_LITERAL,
+      INTEGER_LITERAL
+    };
+
+  private:
+    struct Node;
+
+    struct Form {
+      Form(Node const* fn, Node const* arg)
+        : fn_(fn), arg_(arg) {}
+      Node const* const fn_;
+      Node const* const arg_;
+    };
+
+    struct Reference {
+      explicit Reference(String ident): ident_(ident) {}
+      String const ident_;
+    };
+
+    struct SymbolLiteral {
+      explicit SymbolLiteral(String val): val_(val) {}
+      String const val_;
+    };
+
+    struct IntegerLiteral {
+      explicit IntegerLiteral(int val): val_(val) {}
+      int const val_;
+    };
+
+    struct Node {
+      Node(Form form): subtype(SubType::FORM) {
+        new (&this->form) Form(form);
+      }
+
+      Node(Reference reference): subtype(SubType::REFERENCE) {
+        new (&this->reference) Reference(reference);
+      }
+
+      Node(SymbolLiteral symbolLiteral): subtype(SubType::SYMBOL_LITERAL) {
+        new (&this->symbolLiteral) SymbolLiteral(symbolLiteral);
+      }
+
+      Node(IntegerLiteral integerLiteral): subtype(SubType::INTEGER_LITERAL) {
+        new (&this->integerLiteral) IntegerLiteral(integerLiteral);
+      }
+
+      SubType subtype;
+      union {
+        Form form;
+        Reference reference;
+        SymbolLiteral symbolLiteral;
+        IntegerLiteral integerLiteral;
+      };
+    };
+
+    explicit Expression(Node const* node): node_(node) {
+      assert(node != nullptr);
+    }
+
+    Node const* const node_;
+
+    friend Expression::SubType expr_subtype(Expression expr);
+    friend Expression form(Expression fn, Expression arg);
+    friend Expression symbolLiteral(String val);
+    friend Expression integerLiteral(int val);
+    friend Expression reference(String ident);
+    friend String symbolLiteral_val(Expression expr);
+    friend int integerLiteral_val(Expression expr);
+    friend String reference_ident(Expression expr);
+    friend Expression form_fn(Expression expr);
+    friend Expression form_arg(Expression expr);
+  };
+
+  inline Expression::SubType expr_subtype(Expression expr) {
+    return expr.node_->subtype;
+  }
+
+  inline Expression form(Expression fn, Expression arg) {
+    return Expression(new Expression::Node(Expression::Form(fn.node_, arg.node_)));
+  }
+
+  inline Expression symbolLiteral(Expression::String value) {
+    return Expression(new Expression::Node(Expression::SymbolLiteral(value)));
+  }
+
+  inline Expression integerLiteral(int val) {
+    return Expression(new Expression::Node(Expression::IntegerLiteral(val)));
+  }
+
+  inline Expression reference(Expression::String ident) {
+    return Expression(new Expression::Node(Expression::Reference(ident)));
+  }
+
+  inline Expression::String symbolLiteral_val(Expression expr) {
+    assert(expr_subtype(expr) == Expression::SubType::SYMBOL_LITERAL);
+    return expr.node_->symbolLiteral.val_;
+  }
+
+  inline int integerLiteral_val(Expression expr) {
+    assert(expr_subtype(expr) == Expression::SubType::INTEGER_LITERAL);
+    return expr.node_->integerLiteral.val_;
+  }
+
+  inline Expression::String reference_ident(Expression expr) {
+    assert(expr_subtype(expr) == Expression::SubType::REFERENCE);
+    return expr.node_->reference.ident_;
+  }
+
+  inline Expression form_fn(Expression expr) {
+    assert(expr_subtype(expr) == Expression::SubType::FORM);
+    return Expression(expr.node_->form.fn_);
+  }
+
+  inline Expression form_arg(Expression expr) {
+    assert(expr_subtype(expr) == Expression::SubType::FORM);
+    return Expression(expr.node_->form.arg_);
+  }
+}}
+// }}}
+
+// {{{ model::functions::Function
+namespace model {namespace functions {
+  class Function {
+    template <typename T> using List = utils::lists::List<T>;
+    typedef model::types::Type Type;
+    typedef model::parameters::Parameter Parameter;
+    typedef model::expressions::Expression Expression;
+    typedef List<Parameter const> ParameterList;
+
+    Function(Type type, ParameterList params, Expression expr):
+      type_(type), params_(params), expr_(expr) {}
+
+    Type const type_;
+    ParameterList const params_;
+    Expression const expr_;
+
+    friend Function fun(Type type, ParameterList params, Expression expr);
+    friend Type fun_type(Function fn);
+    friend ParameterList fun_params(Function fn);
+    friend Expression fun_expr(Function fn);
+  };
+
+  Function fun(Function::Type type,
+      Function::ParameterList params, Function::Expression expr) {
+    return Function(type, params, expr);
+  }
+
+  Function::Type fun_type(Function fn) {
+    return fn.type_;
+  }
+
+  Function::ParameterList fun_params(Function fn) {
+    return fn.params_;
+  }
+
+  Function::Expression fun_expr(Function fn) {
+    return fn.expr_;
+  }
+}}
+// }}}
+
 // {{{ model::values::Value
 namespace model {namespace values {
   class Value {
@@ -341,155 +511,6 @@ namespace model {namespace values {
   inline Value comp_arg(Value val) {
     assert(val_subtype(val) == Value::SubType::COMPOSITE);
     return Value(val.node_->composite.arg_);
-  }
-}}
-// }}}
-
-// {{{ model::expressions::Expression
-namespace model {namespace expressions {
-  class Expression {
-    typedef utils::strings::String String;
-    typedef model::values::Value Value;
-
-  public:
-    enum class SubType {
-      FORM,
-      CONSTANT,
-      REFERENCE
-    };
-
-  private:
-    struct Node;
-
-    struct Form {
-      Form(Node const* fn, Node const* arg)
-        : fn_(fn), arg_(arg) {}
-      Node const* const fn_;
-      Node const* const arg_;
-    };
-
-    struct Constant {
-      explicit Constant(Value val): val_(val) {}
-      Value const val_;
-    };
-
-    struct Reference {
-      explicit Reference(String ident): ident_(ident) {}
-      String const ident_;
-    };
-
-    struct Node {
-      Node(Form form): subtype(SubType::FORM) {
-        new (&this->form) Form(form);
-      }
-
-      Node(Constant constant): subtype(SubType::CONSTANT) {
-        new (&this->constant) Constant(constant);
-      }
-
-      Node(Reference reference): subtype(SubType::REFERENCE) {
-        new (&this->reference) Reference(reference);
-      }
-
-      SubType subtype;
-      union {
-        Form form;
-        Constant constant;
-        Reference reference;
-      };
-    };
-
-    explicit Expression(Node const* node): node_(node) {
-      assert(node != nullptr);
-    }
-
-    Node const* const node_;
-
-    friend Expression::SubType expr_subtype(Expression expr);
-    friend Expression form(Expression fn, Expression arg);
-    friend Expression constant(Value val);
-    friend Expression reference(String ident);
-    friend Value constant_val(Expression expr);
-    friend String reference_ident(Expression expr);
-    friend Expression form_fn(Expression expr);
-    friend Expression form_arg(Expression expr);
-  };
-
-  inline Expression::SubType expr_subtype(Expression expr) {
-    return expr.node_->subtype;
-  }
-
-  inline Expression form(Expression fn, Expression arg) {
-    return Expression(new Expression::Node(Expression::Form(fn.node_, arg.node_)));
-  }
-
-  inline Expression constant(Expression::Value value) {
-    return Expression(new Expression::Node(Expression::Constant(value)));
-  }
-
-  inline Expression reference(Expression::String ident) {
-    return Expression(new Expression::Node(Expression::Reference(ident)));
-  }
-
-  inline Expression::Value constant_val(Expression expr) {
-    assert(expr_subtype(expr) == Expression::SubType::CONSTANT);
-    return expr.node_->constant.val_;
-  }
-
-  inline Expression::String reference_ident(Expression expr) {
-    assert(expr_subtype(expr) == Expression::SubType::REFERENCE);
-    return expr.node_->reference.ident_;
-  }
-
-  inline Expression form_fn(Expression expr) {
-    assert(expr_subtype(expr) == Expression::SubType::FORM);
-    return Expression(expr.node_->form.fn_);
-  }
-
-  inline Expression form_arg(Expression expr) {
-    assert(expr_subtype(expr) == Expression::SubType::FORM);
-    return Expression(expr.node_->form.arg_);
-  }
-}}
-// }}}
-
-// {{{ model::functions::Function
-namespace model {namespace functions {
-  class Function {
-    template <typename T> using List = utils::lists::List<T>;
-    typedef model::types::Type Type;
-    typedef model::parameters::Parameter Parameter;
-    typedef model::expressions::Expression Expression;
-    typedef List<Parameter const> ParameterList;
-
-    Function(Type type, ParameterList params, Expression expr):
-      type_(type), params_(params), expr_(expr) {}
-
-    Type const type_;
-    ParameterList const params_;
-    Expression const expr_;
-
-    friend Function fun(Type type, ParameterList params, Expression expr);
-    friend Type fun_type(Function fn);
-    friend ParameterList fun_params(Function fn);
-    friend Expression fun_expr(Function fn);
-  };
-
-  Function fun(Function::Type type,
-      Function::ParameterList params, Function::Expression expr) {
-    return Function(type, params, expr);
-  }
-
-  Function::Type fun_type(Function fn) {
-    return fn.type_;
-  }
-
-  Function::ParameterList fun_params(Function fn) {
-    return fn.params_;
-  }
-
-  Function::Expression fun_expr(Function fn) {
-    return fn.expr_;
   }
 }}
 // }}}
