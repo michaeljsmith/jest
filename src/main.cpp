@@ -415,7 +415,8 @@ namespace model {namespace values {
     enum class SubType {
       COMPOSITE,
       SYMBOL,
-      INTEGER
+      INTEGER,
+      CLOSURE
     };
 
     struct Node;
@@ -542,6 +543,7 @@ namespace model {namespace closures {
 namespace model {namespace values {
   namespace detail {
     using namespace utils::strings;
+    using namespace model::closures;
 
     struct Composite {
       Composite(Node const* fn, Node const* arg)
@@ -560,6 +562,11 @@ namespace model {namespace values {
       int const val_;
     };
 
+    struct ClosureValue {
+      explicit ClosureValue(Closure clos): clos_(clos) {}
+      Closure const clos_;
+    };
+
     struct Node {
       Node(Composite composite): subtype(SubType::COMPOSITE) {
         new (&this->composite) Composite(composite);
@@ -573,11 +580,16 @@ namespace model {namespace values {
         new (&this->integer) Integer(integer);
       }
 
+      Node(ClosureValue clos): subtype(SubType::CLOSURE) {
+        new (&this->closureValue) ClosureValue(clos);
+      }
+
       SubType subtype;
       union {
         Composite composite;
         Symbol symbol;
         Integer integer;
+        ClosureValue closureValue;
       };
     };
   }
@@ -599,6 +611,10 @@ namespace model {namespace values {
     return value(new detail::Node(detail::Integer(val)));
   }
 
+  inline Value closureValue(detail::Closure clos) {
+    return value(new detail::Node(detail::ClosureValue(clos)));
+  }
+
   inline utils::strings::String symbol_val(Value val) {
     assert(val_subtype(val) == detail::SubType::SYMBOL);
     return val_node(val)->symbol.val_;
@@ -607,6 +623,11 @@ namespace model {namespace values {
   inline int integer_val(Value val) {
     assert(val_subtype(val) == detail::SubType::INTEGER);
     return val_node(val)->integer.val_;
+  }
+
+  inline detail::Closure closureValue_val(Value val) {
+    assert(val_subtype(val) == detail::SubType::CLOSURE);
+    return val_node(val)->closureValue.clos_;
   }
 
   inline Value comp_fn(Value val) {
